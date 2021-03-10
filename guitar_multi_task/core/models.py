@@ -367,6 +367,6 @@ class CausalBasicSoftmax(CausalBasicLogistic):
             output[tools.KEY_LOSS] = {tools.KEY_LOSS_TOTAL : tablature_loss}
 
         # Finalize tablature estimation
-        output[tools.KEY_TABLATURE] = tablature_output_layer.finalize_output(tablature_est)
+        output[tools.KEY_TABLATURE] = self.output_layer.finalize_output(tablature_est)
 
         return output
