@@ -1,20 +1,29 @@
 # My imports
-from amt_models.pipeline import train, validate
-from amt_models.models import OnsetsFrames, SoftmaxGroups, LanguageModel
-from amt_models.features import VQT
-from amt_models.tools import seed_everything, GuitarProfile
+from core.models import OnsetsFramesTablature
+
 from amt_models.datasets import GuitarSet
+from amt_models.features import VQT
+
+from amt_models import train, validate
+from amt_models.transcribe import *
+from amt_models.evaluate import *
+
+import amt_models.tools as tools
 
 # Regular imports
 from sacred.observers import FileStorageObserver
 from torch.utils.data import DataLoader
 from sacred import Experiment
-from torch import nn
 
 import torch
 import os
 
-ex = Experiment('Onsets & Frames w/ Mel Spectrogram on GuitarSet')
+EX_NAME = '_'.join([OnsetsFramesTablature.model_name(),
+                    GuitarSet.dataset_name(),
+                    VQT.features_name()])
+
+ex = Experiment('Onsets & Frames w/ VQT on GuitarSet w/ 6-fold Cross Validation')
+
 
 @ex.config
 def config():
@@ -28,19 +37,19 @@ def config():
     num_frames = 200
 
     # Number of training iterations to conduct
-    iterations = 1000
+    iterations = 5000
 
     # How many equally spaced save/validation checkpoints - 0 to disable
-    checkpoints = 20
+    checkpoints = 100
 
     # Number of samples to gather for a batch
-    batch_size = 20
+    batch_size = 30
 
     # The initial learning rate
     learning_rate = 5e-4
 
     # The id of the gpu to use, if available
-    gpu_id = 0
+    gpu_id = 1
 
     # Flag to re-acquire ground-truth data and re-calculate-features
     # This is useful if testing out different parameters
@@ -50,34 +59,50 @@ def config():
     seed = 0
 
     # Create the root directory for the experiment to hold train/transcribe/evaluate materials
-    root_dir = '_'.join([OnsetsFrames.model_name(), GuitarSet.dataset_name(), VQT.features_name()])
-    root_dir = os.path.join(os.getcwd(), '..', 'generated', 'experiments', root_dir)
+    expr_cache = os.path.join(tools.constants.HOME, 'Desktop',
+                              'guitar-multi-task', 'generated', 'experiments')
+    root_dir = os.path.join(expr_cache, EX_NAME)
     os.makedirs(root_dir, exist_ok=True)
 
     # Add a file storage observer for the log directory
     ex.observers.append(FileStorageObserver(root_dir))
 
-@ex.automain
-def tabcnn_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoints,
-                     batch_size, learning_rate, gpu_id, reset_data, seed, root_dir):
-    # Seed everything with the same seed
-    seed_everything(seed)
 
-    # Get a list of the GuitarSet splits
-    splits = GuitarSet.available_splits()
+@ex.automain
+def guitarset_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoints,
+                        batch_size, learning_rate, gpu_id, reset_data, seed, root_dir):
+    # Seed everything with the same seed
+    tools.seed_everything(seed)
 
     # Initialize the default guitar profile
-    profile = GuitarProfile()
+    profile = tools.GuitarProfile()
 
     # Processing parameters
-    dim_in = 8 * 24
+    dim_in = 192
     model_complexity = 3
 
-    # Create the mel spectrogram data processing module
+    # Create the vqt data processing module
     data_proc = VQT(sample_rate=sample_rate,
                     hop_length=hop_length,
                     n_bins=dim_in,
                     bins_per_octave=24)
+
+    # Initialize the estimation pipeline
+    validation_estimator = ComboEstimator([TablatureWrapper(profile=profile)])
+
+    # Initialize the evaluation pipeline
+    validation_evaluator = ComboEvaluator({tools.KEY_LOSS : LossWrapper(),
+                                           tools.KEY_MULTIPITCH : MultipitchEvaluator(),
+                                           tools.KEY_TABLATURE : TablatureEvaluator(profile=profile)})
+
+    # Get a list of the GuitarSet splits
+    splits = GuitarSet.available_splits()
+
+    # Keep all cached data/features under amt_models/generated for now
+    gset_cache = None
+
+    # Initialize an empty dictionary to hold the average results across fold
+    results = dict()
 
     # Perform each fold of cross-validation
     for k in range(6):
@@ -98,16 +123,16 @@ def tabcnn_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoint
 
         print('Loading training partition...')
 
-        save_loc = os.path.join(os.getcwd(), '..', 'generated', 'data')
         # Create a dataset corresponding to the training partition
-        gset_train = GuitarSet(splits=train_splits,
+        gset_train = GuitarSet(base_dir=None,
+                               splits=train_splits,
                                hop_length=hop_length,
                                sample_rate=sample_rate,
                                data_proc=data_proc,
                                profile=profile,
                                num_frames=num_frames,
                                reset_data=reset_data,
-                               save_loc=save_loc)
+                               save_loc=gset_cache)
 
         # Create a PyTorch data loader for the dataset
         train_loader = DataLoader(dataset=gset_train,
@@ -119,67 +144,73 @@ def tabcnn_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoint
         print('Loading validation partition...')
 
         # Create a dataset corresponding to the validation partition
-        gset_val = GuitarSet(splits=val_splits,
+        gset_val = GuitarSet(base_dir=None,
+                             splits=val_splits,
                              hop_length=hop_length,
                              sample_rate=sample_rate,
                              data_proc=data_proc,
                              profile=profile,
-                             store_data=True)
+                             store_data=True,
+                             save_loc=gset_cache)
 
         print('Loading testing partition...')
 
         # Create a dataset corresponding to the training partition
-        gset_test = GuitarSet(splits=test_splits,
+        gset_test = GuitarSet(base_dir=None,
+                              splits=test_splits,
                               hop_length=hop_length,
                               sample_rate=sample_rate,
                               data_proc=data_proc,
                               profile=profile,
-                              split_notes=False)
+                              split_notes=False,
+                              save_loc=gset_cache)
 
         print('Initializing model...')
 
         # Initialize a new instance of the model
-        of1 = OnsetsFrames(dim_in, None, data_proc.get_num_channels(), model_complexity, gpu_id)
-
-        # Exchange the logistic banks for group softmax layers
-        of1.onsets[-1] = SoftmaxGroups(of1.dim_lm1, profile, 'onsets')
-        of1.pianoroll[-1] = SoftmaxGroups(of1.dim_am, profile)
-        of1.dim_lm2 = of1.onsets[-1].dim_out + of1.pianoroll[-1].dim_out
-        of1.adjoin = nn.Sequential(
-            LanguageModel(of1.dim_lm2, of1.dim_lm2),
-            SoftmaxGroups(of1.dim_lm2, profile, 'pitch')
-        )
-
-        # Set the new model profile
-        of1.profile = profile
-
-        of1.change_device()
-        of1.train()
+        model = OnsetsFramesTablature(dim_in, profile, data_proc.get_num_channels(), model_complexity, False, gpu_id)
+        model.change_device()
+        model.train()
 
         # Initialize a new optimizer for the model parameters
-        optimizer = torch.optim.Adam(of1.parameters(), learning_rate)
+        optimizer = torch.optim.Adam(model.parameters(), learning_rate)
 
         print('Training classifier...')
 
         # Create a log directory for the training experiment
         model_dir = os.path.join(root_dir, 'models', 'fold-' + str(k))
 
+        # Set validation patterns for training
+        validation_evaluator.set_patterns(['loss', 'f1', 'tdr'])
+
         # Train the model
-        of1 = train(model=of1,
-                    train_loader=train_loader,
-                    optimizer=optimizer,
-                    iterations=iterations,
-                    checkpoints=checkpoints,
-                    log_dir=model_dir,
-                    val_set=gset_val)
+        model = train(model=model,
+                      train_loader=train_loader,
+                      optimizer=optimizer,
+                      iterations=iterations,
+                      checkpoints=checkpoints,
+                      log_dir=model_dir,
+                      val_set=gset_val,
+                      estimator=validation_estimator,
+                      evaluator=validation_evaluator)
 
         print('Transcribing and evaluating test partition...')
 
-        estim_dir = os.path.join(root_dir, 'estimated')
-        results_dir = os.path.join(root_dir, 'results')
+        # Add a save directory to the evaluators and reset the patterns
+        validation_evaluator.set_save_dir(os.path.join(root_dir, 'results'))
+        validation_evaluator.set_patterns(None)
 
         # Get the average results for the fold
-        fold_results = validate(of1, gset_test, estim_dir, results_dir)
+        fold_results = validate(model, gset_test, evaluator=validation_evaluator, estimator=validation_estimator)
 
-        # Log the average results for the fold in metrics.json
-        ex.log_scalar('fold_results', fold_results, k)
+        # Add the results to the tracked fold results
+        results = append_results(results, fold_results)
+
+        # Reset the results for the next fold
+        validation_evaluator.reset_results()
+
+        # Log the fold results for the fold in metrics.json
+        ex.log_scalar('Fold Results', fold_results, k)
+
+    # Log the average results for the fold in metrics.json
+    ex.log_scalar('Overall Results', average_results(results), 0)
