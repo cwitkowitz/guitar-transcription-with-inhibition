@@ -40,16 +40,16 @@ def config():
     iterations = 1000
 
     # How many equally spaced save/validation checkpoints - 0 to disable
-    checkpoints = 20
+    checkpoints = 50
 
     # Number of samples to gather for a batch
-    batch_size = 30
+    batch_size = 10
 
     # The initial learning rate
     learning_rate = 5e-4
 
     # The id of the gpu to use, if available
-    gpu_id = 1
+    gpu_id = 0
 
     # Flag to re-acquire ground-truth data and re-calculate-features
     # This is useful if testing out different parameters
@@ -89,12 +89,12 @@ def guitarset_cross_val(sample_rate, hop_length, num_frames, iterations, checkpo
 
     # Initialize the estimation pipeline
     validation_estimator = ComboEstimator([TablatureWrapper(profile=profile)])
-    #validation_estimator = None
 
     # Initialize the evaluation pipeline
-    validation_evaluator = ComboEvaluator({tools.KEY_LOSS : LossWrapper(),
-                                           tools.KEY_MULTIPITCH : MultipitchEvaluator(),
-                                           tools.KEY_TABLATURE : TablatureEvaluator(profile=profile)})
+    validation_evaluator = ComboEvaluator([LossWrapper(),
+                                           MultipitchEvaluator(),
+                                           TablatureEvaluator(profile=profile),
+                                           SoftmaxAccuracy(key=tools.KEY_TABLATURE)])
 
     # Get a list of the GuitarSet splits
     splits = GuitarSet.available_splits()
@@ -182,7 +182,7 @@ def guitarset_cross_val(sample_rate, hop_length, num_frames, iterations, checkpo
         model_dir = os.path.join(root_dir, 'models', 'fold-' + str(k))
 
         # Set validation patterns for training
-        validation_evaluator.set_patterns(['loss', 'f1', 'tdr'])
+        validation_evaluator.set_patterns(['loss', 'f1', 'tdr', 'acc'])
 
         # Train the model
         model = train(model=model,
