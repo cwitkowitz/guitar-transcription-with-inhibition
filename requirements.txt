@@ -1,3 +1,1 @@
-torch>=1.4.0
-sacred>= 0.8.1
-git+https://github.com/cwitkowitz/amt_models.git
+amt_tools>=0.1.4
