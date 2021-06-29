@@ -1,6 +1,6 @@
 from amt_tools.evaluate import ComboEvaluator, MultipitchEvaluator, TablatureEvaluator, SoftmaxAccuracy
-from amt_tools.transcribe import ComboEstimator, TablatureWrapper, IterativeStackedNoteTranscriber
-from amt_tools.inference import run_online
+from amt_tools.transcribe import ComboEstimator, TablatureWrapper, StackedNoteTranscriber
+from amt_tools.inference import run_offline
 from amt_tools.features import CQT
 
 import amt_tools.tools as tools
@@ -44,7 +44,7 @@ cqt_features = {tools.KEY_FEATS : data_proc.process_audio(audio),
 
 # Define the estimation pipeline
 estimator = ComboEstimator([TablatureWrapper(profile=profile, stacked=True),
-                            IterativeStackedNoteTranscriber(profile=profile)])
+                            StackedNoteTranscriber(profile=profile)])
 
 # Define the evaluation pipeline
 # TODO - stacked multipitch evaluator
@@ -53,7 +53,7 @@ evaluator = ComboEvaluator([TablatureEvaluator(profile=profile),
                             SoftmaxAccuracy(key=tools.KEY_TABLATURE)])
 
 # Perform inference offline
-predictions = run_online(cqt_features, model, estimator)
+predictions = run_offline(cqt_features, model, estimator)
 
 # Evaluate the predictions and track the results
 results = evaluator.get_track_results(predictions, ground_truth)
