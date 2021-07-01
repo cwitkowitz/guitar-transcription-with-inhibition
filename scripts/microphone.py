@@ -1,4 +1,3 @@
-from amt_tools.evaluate import ComboEvaluator, TablatureEvaluator, SoftmaxAccuracy
 from amt_tools.transcribe import ComboEstimator, TablatureWrapper, IterativeStackedNoteTranscriber
 from amt_tools.inference import run_single_frame
 from amt_tools.features import MelSpec, AudioStream
@@ -9,8 +8,6 @@ import torch
 
 # Define path to model, audio, and ground-truth
 model_path = '/home/rockstar/Desktop/guitar-transcription/generated/experiments/TabCNN_GuitarSet_MelSpec/models/fold-0/model-200.pt'
-audio_path = '/home/rockstar/Desktop/Datasets/GuitarSet/audio_mono-mic/00_BN1-129-Eb_solo_mic.wav'
-gt_path = '/home/rockstar/Desktop/guitar-transcription/generated/data/GuitarSet/ground_truth/00_BN1-129-Eb_solo.npz'
 
 # Feature extraction parameters
 sample_rate = 22050
@@ -26,11 +23,6 @@ model = torch.load(model_path, map_location=device)
 model.change_device(gpu_id)
 model.eval()
 
-# Load the ground-truth
-ground_truth = tools.load_unpack_npz(gt_path)
-
-assert sample_rate == ground_truth[tools.KEY_FS]
-
 # Initialize the default guitar profile
 profile = tools.GuitarProfile()
 
@@ -41,23 +33,13 @@ data_proc = MelSpec(sample_rate=sample_rate, hop_length=hop_length, n_mels=192, 
 estimator = ComboEstimator([TablatureWrapper(profile=profile, stacked=True),
                             IterativeStackedNoteTranscriber(profile=profile)])
 
-# Define the evaluation pipeline
-evaluator = ComboEvaluator([TablatureEvaluator(profile=profile),
-                            SoftmaxAccuracy(key=tools.KEY_TABLATURE)])
-
-# Load and normalize the audio
-audio, _ = tools.load_normalize_audio(audio_path, fs=sample_rate, norm=-1)
 # Instantiate a dictionary to hold predictions
 predictions = {}
 
-# Number of frames of features to pad at beginning and end
-feature_prime_amount = 4
-feature_deprime_amount = 1
-
 # Instantiate the audio stream and start streaming
-feature_stream = AudioStream(data_proc, model.frame_width, audio, False, False)
-# Prime the buffer with empties
-feature_stream.prime_buffer(feature_prime_amount)
+#feature_stream = AudioStream(data_proc, model.frame_width, audio, False, False)
+# Fill the buffer with empties
+feature_stream.prime_buffer(9)
 # Start the feature stream
 feature_stream.start_streaming()
 
@@ -68,19 +50,3 @@ while not feature_stream.query_finished():
     if feature_stream.query_buffer_full():
         # Perform inference on a single frame
         predictions = run_single_frame(features, model, predictions, estimator)
-
-# De-prime the buffer with features
-for i in range(feature_deprime_amount):
-    # Advance the buffer with empty frames
-    features = feature_stream.buffer_empty_frame()
-    # Perform inference on a single frame
-    predictions = run_single_frame(features, model, predictions, estimator)
-
-# Stop and reset the feature stream
-feature_stream.reset_stream()
-
-# Evaluate the predictions and track the results
-results = evaluator.get_track_results(predictions, ground_truth)
-
-# Print results to the console
-print(results)

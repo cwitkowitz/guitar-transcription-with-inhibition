@@ -1,16 +1,16 @@
 from amt_tools.evaluate import ComboEvaluator, MultipitchEvaluator, TablatureEvaluator, SoftmaxAccuracy
 from amt_tools.transcribe import ComboEstimator, TablatureWrapper, IterativeStackedNoteTranscriber
 from amt_tools.inference import run_online
-from amt_tools.features import CQT
+from amt_tools.features import MelSpec
 
 import amt_tools.tools as tools
 
 import torch
 
 # Define path to model, audio, and ground-truth
-model_path = '/home/rockstar/Desktop/amt-tools/generated/experiments/TabCNN_GuitarSet_CQT/models/fold-0/model-200.pt'
+model_path = '/home/rockstar/Desktop/guitar-transcription/generated/experiments/TabCNN_GuitarSet_MelSpec/models/fold-0/model-200.pt'
 audio_path = '/home/rockstar/Desktop/Datasets/GuitarSet/audio_mono-mic/00_BN1-129-Eb_solo_mic.wav'
-gt_path = '/home/rockstar/Desktop/amt-tools/generated/data/GuitarSet/ground_truth/00_BN1-129-Eb_solo.npz'
+gt_path = '/home/rockstar/Desktop/guitar-transcription/generated/data/GuitarSet/ground_truth/00_BN1-129-Eb_solo.npz'
 
 # Feature extraction parameters
 sample_rate = 22050
@@ -32,15 +32,15 @@ ground_truth = tools.load_unpack_npz(gt_path)
 # Initialize the default guitar profile
 profile = tools.GuitarProfile()
 
-# Initialize the CQT feature extraction protocol
-data_proc = CQT(sample_rate=sample_rate, hop_length=hop_length, n_bins=192, bins_per_octave=24)
+# Initialize the feature extraction protocol
+data_proc = MelSpec(sample_rate=sample_rate, hop_length=hop_length, n_mels=192, decibels=False, center=False)
 
 # Load the audio
 audio, _ = tools.load_normalize_audio(audio_path, fs=sample_rate)
 
 # Compute the features
-cqt_features = {tools.KEY_FEATS : data_proc.process_audio(audio),
-                tools.KEY_TIMES : data_proc.get_times(audio)}
+features = {tools.KEY_FEATS : data_proc.process_audio(audio),
+            tools.KEY_TIMES : data_proc.get_times(audio)}
 
 # Define the estimation pipeline
 estimator = ComboEstimator([TablatureWrapper(profile=profile, stacked=True),
@@ -53,7 +53,7 @@ evaluator = ComboEvaluator([TablatureEvaluator(profile=profile),
                             SoftmaxAccuracy(key=tools.KEY_TABLATURE)])
 
 # Perform inference offline
-predictions = run_online(cqt_features, model, estimator)
+predictions = run_online(features, model, estimator)
 
 # Evaluate the predictions and track the results
 results = evaluator.get_track_results(predictions, ground_truth)

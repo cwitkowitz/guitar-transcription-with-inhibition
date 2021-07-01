@@ -1,14 +1,15 @@
+# Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
+
 # My imports
-from scripts.models import OnsetsFramesTablature
+from amt_tools.datasets import GuitarSet
+from amt_tools.models import TabCNN
+from amt_tools.features import MelSpec
 
-from amt_models.datasets import GuitarSet
-from amt_models.features import VQT
+from amt_tools.train import train
+from amt_tools.transcribe import *
+from amt_tools.evaluate import *
 
-from amt_models import train, validate
-from amt_models.transcribe import *
-from amt_models.evaluate import *
-
-import amt_models.tools as tools
+import amt_tools.tools as tools
 
 # Regular imports
 from sacred.observers import FileStorageObserver
@@ -18,11 +19,11 @@ from sacred import Experiment
 import torch
 import os
 
-EX_NAME = '_'.join([OnsetsFramesTablature.model_name(),
+EX_NAME = '_'.join([TabCNN.model_name(),
                     GuitarSet.dataset_name(),
-                    VQT.features_name()])
+                    MelSpec.features_name()])
 
-ex = Experiment('Onsets & Frames w/ VQT on GuitarSet w/ 6-fold Cross Validation')
+ex = Experiment('TabCNN w/ Real-Time MelSpec on GuitarSet w/ 6-fold Cross Validation')
 
 
 @ex.config
@@ -37,19 +38,19 @@ def config():
     num_frames = 200
 
     # Number of training iterations to conduct
-    iterations = 5000
+    iterations = 2500
 
     # How many equally spaced save/validation checkpoints - 0 to disable
-    checkpoints = 100
+    checkpoints = 50
 
     # Number of samples to gather for a batch
-    batch_size = 30
+    batch_size = 10
 
     # The initial learning rate
-    learning_rate = 5e-4
+    learning_rate = 1.0
 
     # The id of the gpu to use, if available
-    gpu_id = 1
+    gpu_id = 0
 
     # Flag to re-acquire ground-truth data and re-calculate-features
     # This is useful if testing out different parameters
@@ -59,18 +60,15 @@ def config():
     seed = 0
 
     # Create the root directory for the experiment to hold train/transcribe/evaluate materials
-    expr_cache = os.path.join(tools.constants.HOME, 'Desktop',
-                              'guitar-multi-task', 'generated', 'experiments')
-    root_dir = os.path.join(expr_cache, EX_NAME)
+    root_dir = os.path.join('..', 'generated', 'experiments', EX_NAME)
     os.makedirs(root_dir, exist_ok=True)
 
     # Add a file storage observer for the log directory
     ex.observers.append(FileStorageObserver(root_dir))
 
-
 @ex.automain
-def guitarset_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoints,
-                        batch_size, learning_rate, gpu_id, reset_data, seed, root_dir):
+def tabcnn_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoints,
+                     batch_size, learning_rate, gpu_id, reset_data, seed, root_dir):
     # Seed everything with the same seed
     tools.seed_everything(seed)
 
@@ -79,53 +77,53 @@ def guitarset_cross_val(sample_rate, hop_length, num_frames, iterations, checkpo
 
     # Processing parameters
     dim_in = 192
-    model_complexity = 3
+    model_complexity = 1
 
-    # Create the vqt data processing module
-    data_proc = VQT(sample_rate=sample_rate,
-                    hop_length=hop_length,
-                    n_bins=dim_in,
-                    bins_per_octave=24)
+    # Create the cqt data processing module
+    data_proc = MelSpec(sample_rate=sample_rate,
+                        hop_length=hop_length,
+                        n_mels=dim_in,
+                        decibels=False,
+                        center=False)
 
     # Initialize the estimation pipeline
     validation_estimator = ComboEstimator([TablatureWrapper(profile=profile)])
 
     # Initialize the evaluation pipeline
-    validation_evaluator = ComboEvaluator({tools.KEY_LOSS : LossWrapper(),
-                                           tools.KEY_MULTIPITCH : MultipitchEvaluator(),
-                                           tools.KEY_TABLATURE : TablatureEvaluator(profile=profile)})
+    validation_evaluator = ComboEvaluator([LossWrapper(),
+                                           MultipitchEvaluator(),
+                                           TablatureEvaluator(profile=profile),
+                                           SoftmaxAccuracy(key=tools.KEY_TABLATURE)])
 
     # Get a list of the GuitarSet splits
     splits = GuitarSet.available_splits()
 
     # Keep all cached data/features under amt_models/generated for now
-    gset_cache = None
+    gset_cache = os.path.join('..', 'generated', 'data')
 
     # Initialize an empty dictionary to hold the average results across fold
     results = dict()
 
     # Perform each fold of cross-validation
     for k in range(6):
-        # Determine the name of the split being removed
+        # Determine the name of the splits being removed
         test_hold_out = '0' + str(k)
         val_hold_out = '0' + str(5 - k)
 
         print('--------------------')
         print(f'Fold {test_hold_out}:')
 
-        # Remove the hold out split to get the training partition
+        # Remove the hold out splits to get the partitions
         train_splits = splits.copy()
-        train_splits.remove(test_hold_out)
         train_splits.remove(val_hold_out)
-
+        train_splits.remove(test_hold_out)
         val_splits = [val_hold_out]
         test_splits = [test_hold_out]
 
         print('Loading training partition...')
 
         # Create a dataset corresponding to the training partition
-        gset_train = GuitarSet(base_dir=None,
-                               splits=train_splits,
+        gset_train = GuitarSet(splits=train_splits,
                                hop_length=hop_length,
                                sample_rate=sample_rate,
                                data_proc=data_proc,
@@ -134,6 +132,16 @@ def guitarset_cross_val(sample_rate, hop_length, num_frames, iterations, checkpo
                                reset_data=reset_data,
                                save_loc=gset_cache)
 
+        # Create a dataset corresponding to the validation partition
+        gset_val = GuitarSet(splits=val_splits,
+                             hop_length=hop_length,
+                             sample_rate=sample_rate,
+                             data_proc=data_proc,
+                             profile=profile,
+                             num_frames=num_frames,
+                             reset_data=reset_data,
+                             save_loc=gset_cache)
+
         # Create a PyTorch data loader for the dataset
         train_loader = DataLoader(dataset=gset_train,
                                   batch_size=batch_size,
@@ -141,58 +149,45 @@ def guitarset_cross_val(sample_rate, hop_length, num_frames, iterations, checkpo
                                   num_workers=0,
                                   drop_last=True)
 
-        print('Loading validation partition...')
-
-        # Create a dataset corresponding to the validation partition
-        gset_val = GuitarSet(base_dir=None,
-                             splits=val_splits,
-                             hop_length=hop_length,
-                             sample_rate=sample_rate,
-                             data_proc=data_proc,
-                             profile=profile,
-                             store_data=True,
-                             save_loc=gset_cache)
-
         print('Loading testing partition...')
 
-        # Create a dataset corresponding to the training partition
-        gset_test = GuitarSet(base_dir=None,
-                              splits=test_splits,
+        # Create a dataset corresponding to the testing partition
+        gset_test = GuitarSet(splits=test_splits,
                               hop_length=hop_length,
                               sample_rate=sample_rate,
                               data_proc=data_proc,
                               profile=profile,
-                              split_notes=False,
+                              store_data=False,
                               save_loc=gset_cache)
 
         print('Initializing model...')
 
         # Initialize a new instance of the model
-        model = OnsetsFramesTablature(dim_in, profile, data_proc.get_num_channels(), model_complexity, False, gpu_id)
-        model.change_device()
-        model.train()
+        tabcnn = TabCNN(dim_in, profile, data_proc.get_num_channels(), model_complexity, gpu_id)
+        tabcnn.change_device()
+        tabcnn.train()
 
         # Initialize a new optimizer for the model parameters
-        optimizer = torch.optim.Adam(model.parameters(), learning_rate)
+        optimizer = torch.optim.Adadelta(tabcnn.parameters(), learning_rate)
 
-        print('Training classifier...')
+        print('Training model...')
 
         # Create a log directory for the training experiment
         model_dir = os.path.join(root_dir, 'models', 'fold-' + str(k))
 
         # Set validation patterns for training
-        validation_evaluator.set_patterns(['loss', 'f1', 'tdr'])
+        validation_evaluator.set_patterns(['loss', 'f1', 'tdr', 'acc'])
 
         # Train the model
-        model = train(model=model,
-                      train_loader=train_loader,
-                      optimizer=optimizer,
-                      iterations=iterations,
-                      checkpoints=checkpoints,
-                      log_dir=model_dir,
-                      val_set=gset_val,
-                      estimator=validation_estimator,
-                      evaluator=validation_evaluator)
+        tabcnn = train(model=tabcnn,
+                       train_loader=train_loader,
+                       optimizer=optimizer,
+                       iterations=iterations,
+                       checkpoints=checkpoints,
+                       log_dir=model_dir,
+                       val_set=gset_val,
+                       estimator=validation_estimator,
+                       evaluator=validation_evaluator)
 
         print('Transcribing and evaluating test partition...')
 
@@ -201,7 +196,7 @@ def guitarset_cross_val(sample_rate, hop_length, num_frames, iterations, checkpo
         validation_evaluator.set_patterns(None)
 
         # Get the average results for the fold
-        fold_results = validate(model, gset_test, evaluator=validation_evaluator, estimator=validation_estimator)
+        fold_results = validate(tabcnn, gset_test, evaluator=validation_evaluator, estimator=validation_estimator)
 
         # Add the results to the tracked fold results
         results = append_results(results, fold_results)
