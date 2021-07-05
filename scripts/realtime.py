@@ -58,7 +58,11 @@ feature_deprime_amount = 1
 # Disable toolbar globally
 tools.global_toolbar_disable()
 # Create a figure to continually update
-visualizer = tools.StackedPitchListVisualizer(figsize=(10, 5), plot_frequency=4)
+visualizer = tools.StackedPitchListVisualizer(figsize=(10, 5),
+                                              plot_frequency=10,
+                                              time_window=4,
+                                              colors=['red', 'green', 'black', 'red', 'green', 'black'],
+                                              labels=tools.DEFAULT_GUITAR_LABELS)
 
 # Instantiate the audio stream and start streaming
 feature_stream = AudioStream(data_proc, model.frame_width, audio, True, True)
@@ -76,7 +80,8 @@ while not feature_stream.query_finished():
         new_predictions = run_single_frame(features, model, estimator)
         # Append the new predictions
         predictions = tools.dict_append(predictions, new_predictions)
-        visualizer.update(new_predictions[tools.KEY_TIMES], new_predictions[tools.KEY_PITCHLIST])
+        # Call the visualizer's update loop
+        visualizer.update(new_predictions[tools.KEY_TIMES].item(), new_predictions[tools.KEY_PITCHLIST])
 
 # De-prime the buffer with features
 for i in range(feature_deprime_amount):
@@ -86,7 +91,8 @@ for i in range(feature_deprime_amount):
     new_predictions = run_single_frame(features, model, estimator)
     # Append the new predictions
     predictions = tools.dict_append(predictions, new_predictions)
-    visualizer.update(new_predictions[tools.KEY_TIMES], new_predictions[tools.KEY_PITCHLIST])
+    # Call the visualizer's update loop
+    visualizer.update(new_predictions[tools.KEY_TIMES].item(), new_predictions[tools.KEY_PITCHLIST])
 
 # Stop and reset the feature stream
 feature_stream.reset_stream()
