@@ -1,4 +1,4 @@
-from amt_tools.transcribe import ComboEstimator, TablatureWrapper, IterativeStackedNoteTranscriber
+from amt_tools.transcribe import ComboEstimator, TablatureWrapper, StackedPitchListWrapper, IterativeStackedNoteTranscriber
 from amt_tools.inference import run_single_frame
 from amt_tools.features import MelSpec, MicrophoneStream
 
@@ -30,11 +30,9 @@ profile = tools.GuitarProfile()
 data_proc = MelSpec(sample_rate=sample_rate, hop_length=hop_length, n_mels=192, decibels=False, center=False)
 
 # Define the estimation pipeline
-estimator = ComboEstimator([TablatureWrapper(profile=profile, stacked=True),
-                            IterativeStackedNoteTranscriber(profile=profile)])
-
-# Instantiate a dictionary to hold predictions
-predictions = {}
+estimator = ComboEstimator([TablatureWrapper(profile=profile, stacked=True),])
+                            #StackedPitchListWrapper(profile=profile)])
+                            #IterativeStackedNoteTranscriber(profile=profile)])
 
 # Disable toolbar globally
 tools.global_toolbar_disable()
@@ -52,8 +50,10 @@ while not feature_stream.query_finished():
     # Advance the buffer and get the current features
     features = feature_stream.buffer_new_frame()
 
-    #if feature_stream.query_frame_buffer_full():
+    """
+    if feature_stream.query_frame_buffer_full():
         # Perform inference on a single frame
-        #predictions = run_single_frame(features, model, predictions, estimator)
-    #print(feature_stream.get_elapsed_time())
-    visualizer.update(features['features'][0])
+        predictions = run_single_frame(features, model, {}, estimator)
+        visualizer.update(predictions[tools.KEY_TIMES], predictions[tools.KEY_PITCHLIST])
+    """
+    visualizer.update(features[tools.KEY_FEATS][0])

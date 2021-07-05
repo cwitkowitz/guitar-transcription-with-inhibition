@@ -1,5 +1,5 @@
 from amt_tools.evaluate import ComboEvaluator, TablatureEvaluator, SoftmaxAccuracy
-from amt_tools.transcribe import ComboEstimator, TablatureWrapper, IterativeStackedNoteTranscriber
+from amt_tools.transcribe import ComboEstimator, TablatureWrapper, StackedPitchListWrapper, IterativeStackedNoteTranscriber
 from amt_tools.inference import run_single_frame
 from amt_tools.features import MelSpec, AudioStream
 
@@ -39,7 +39,8 @@ data_proc = MelSpec(sample_rate=sample_rate, hop_length=hop_length, n_mels=192, 
 
 # Define the estimation pipeline
 estimator = ComboEstimator([TablatureWrapper(profile=profile, stacked=True),
-                            IterativeStackedNoteTranscriber(profile=profile)])
+                            StackedPitchListWrapper(profile=profile)])
+                            #IterativeStackedNoteTranscriber(profile=profile)])
 
 # Define the evaluation pipeline
 evaluator = ComboEvaluator([TablatureEvaluator(profile=profile),
@@ -54,8 +55,13 @@ predictions = {}
 feature_prime_amount = 4
 feature_deprime_amount = 1
 
+# Disable toolbar globally
+tools.global_toolbar_disable()
+# Create a figure to continually update
+visualizer = tools.StackedPitchListVisualizer(figsize=(10, 5), plot_frequency=4)
+
 # Instantiate the audio stream and start streaming
-feature_stream = AudioStream(data_proc, model.frame_width, audio, False, False)
+feature_stream = AudioStream(data_proc, model.frame_width, audio, True, True)
 # Prime the buffer with empties
 feature_stream.prime_frame_buffer(feature_prime_amount)
 # Start the feature stream
@@ -67,14 +73,20 @@ while not feature_stream.query_finished():
 
     if feature_stream.query_frame_buffer_full():
         # Perform inference on a single frame
-        predictions = run_single_frame(features, model, predictions, estimator)
+        new_predictions = run_single_frame(features, model, estimator)
+        # Append the new predictions
+        predictions = tools.dict_append(predictions, new_predictions)
+        visualizer.update(new_predictions[tools.KEY_TIMES], new_predictions[tools.KEY_PITCHLIST])
 
 # De-prime the buffer with features
 for i in range(feature_deprime_amount):
     # Advance the buffer with empty frames
     features = feature_stream.buffer_empty_frame()
     # Perform inference on a single frame
-    predictions = run_single_frame(features, model, predictions, estimator)
+    new_predictions = run_single_frame(features, model, estimator)
+    # Append the new predictions
+    predictions = tools.dict_append(predictions, new_predictions)
+    visualizer.update(new_predictions[tools.KEY_TIMES], new_predictions[tools.KEY_PITCHLIST])
 
 # Stop and reset the feature stream
 feature_stream.reset_stream()
