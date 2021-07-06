@@ -30,19 +30,23 @@ profile = tools.GuitarProfile()
 data_proc = MelSpec(sample_rate=sample_rate, hop_length=hop_length, n_mels=192, decibels=False, center=False)
 
 # Define the estimation pipeline
-estimator = ComboEstimator([TablatureWrapper(profile=profile, stacked=True),])
-                            #StackedPitchListWrapper(profile=profile)])
+estimator = ComboEstimator([TablatureWrapper(profile=profile, stacked=True),
+                            StackedPitchListWrapper(profile=profile)])
                             #IterativeStackedNoteTranscriber(profile=profile)])
 
 # Disable toolbar globally
 tools.global_toolbar_disable()
 # Create a figure to continually update
-visualizer = tools.WaveformVisualizer(figsize=(10, 5), sample_rate=sample_rate)
+visualizer = tools.StackedPitchListVisualizer(figsize=(10, 5),
+                                              plot_frequency=10,
+                                              time_window=4,
+                                              colors=['red', 'green', 'black', 'red', 'green', 'black'],
+                                              labels=tools.DEFAULT_GUITAR_LABELS)
 
 # Instantiate the audio stream and start streaming
-feature_stream = MicrophoneStream(data_proc, 1)#model.frame_width)
+feature_stream = MicrophoneStream(data_proc, model.frame_width)
 # Fill the buffer with empties
-#feature_stream.prime_frame_buffer(9)
+feature_stream.prime_frame_buffer(9)
 # Start the feature stream
 feature_stream.start_streaming()
 
@@ -50,10 +54,7 @@ while not feature_stream.query_finished():
     # Advance the buffer and get the current features
     features = feature_stream.buffer_new_frame()
 
-    """
     if feature_stream.query_frame_buffer_full():
         # Perform inference on a single frame
-        predictions = run_single_frame(features, model, {}, estimator)
+        predictions = run_single_frame(features, model, estimator)
         visualizer.update(predictions[tools.KEY_TIMES], predictions[tools.KEY_PITCHLIST])
-    """
-    visualizer.update(features[tools.KEY_FEATS][0])
