@@ -1,16 +1,17 @@
 from amt_tools.evaluate import ComboEvaluator, TablatureEvaluator, SoftmaxAccuracy
 from amt_tools.transcribe import ComboEstimator, TablatureWrapper, StackedPitchListWrapper, IterativeStackedNoteTranscriber
 from amt_tools.inference import run_single_frame
-from amt_tools.features import MelSpec, AudioStream
+from amt_tools.features import MelSpec, AudioFileStream
 
 import amt_tools.tools as tools
 
 import torch
+import time
 
 # Define path to model, audio, and ground-truth
 model_path = '/home/rockstar/Desktop/guitar-transcription/generated/experiments/TabCNN_GuitarSet_MelSpec/models/model-5000.pt'
-audio_path = '/home/rockstar/Desktop/Datasets/GuitarSet/audio_mono-mic/00_BN1-129-Eb_solo_mic.wav'
-gt_path = '/home/rockstar/Desktop/guitar-transcription/generated/data/GuitarSet/ground_truth/00_BN1-129-Eb_solo.npz'
+audio_path = '/home/rockstar/Desktop/Datasets/GuitarSet/audio_mono-mic/00_BN1-129-Eb_comp_mic.wav'
+gt_path = '/home/rockstar/Desktop/guitar-transcription/generated/data/GuitarSet/ground_truth/00_BN1-129-Eb_comp.npz'
 
 # Feature extraction parameters
 sample_rate = 22050
@@ -39,15 +40,13 @@ data_proc = MelSpec(sample_rate=sample_rate, hop_length=hop_length, n_mels=192, 
 
 # Define the estimation pipeline
 estimator = ComboEstimator([TablatureWrapper(profile=profile, stacked=True),
-                            StackedPitchListWrapper(profile=profile)])
-                            #IterativeStackedNoteTranscriber(profile=profile)])
+                            #StackedPitchListWrapper(profile=profile)])
+                            IterativeStackedNoteTranscriber(profile=profile)])
 
 # Define the evaluation pipeline
 evaluator = ComboEvaluator([TablatureEvaluator(profile=profile),
                             SoftmaxAccuracy(key=tools.KEY_TABLATURE)])
 
-# Load and normalize the audio
-audio, _ = tools.load_normalize_audio(audio_path, fs=sample_rate, norm=-1)
 # Instantiate a dictionary to hold predictions
 predictions = {}
 
@@ -58,14 +57,15 @@ feature_deprime_amount = 1
 # Disable toolbar globally
 tools.global_toolbar_disable()
 # Create a figure to continually update
-visualizer = tools.StackedPitchListVisualizer(figsize=(10, 5),
-                                              plot_frequency=10,
-                                              time_window=4,
-                                              colors=['red', 'green', 'black', 'red', 'green', 'black'],
-                                              labels=tools.DEFAULT_GUITAR_LABELS)
+#visualizer = tools.StackedPitchListVisualizer(figsize=(10, 5),
+#                                              plot_frequency=10,
+#                                              time_window=5,
+#                                              colors=['red', 'green', 'black', 'red', 'green', 'black'],
+#                                              labels=tools.DEFAULT_GUITAR_LABELS)
+visualizer = tools.GuitarTablatureVisualizer(figsize=(10, 5), plot_frequency=12, time_window=5)
 
 # Instantiate the audio stream and start streaming
-feature_stream = AudioStream(data_proc, model.frame_width, audio, True, True)
+feature_stream = AudioFileStream(data_proc, model.frame_width, audio_path, True, True)
 # Prime the buffer with empties
 feature_stream.prime_frame_buffer(feature_prime_amount)
 # Start the feature stream
@@ -80,8 +80,13 @@ while not feature_stream.query_finished():
         new_predictions = run_single_frame(features, model, estimator)
         # Append the new predictions
         predictions = tools.dict_append(predictions, new_predictions)
+        ###
+        current_time = new_predictions[tools.KEY_TIMES].item()
+        stacked_notes = estimator.estimators[-1].get_active_stacked_notes(current_time)
+        stacked_frets = tools.stacked_notes_to_frets(stacked_notes, profile.tuning)
+        visualizer.update(current_time, stacked_frets)
         # Call the visualizer's update loop
-        visualizer.update(new_predictions[tools.KEY_TIMES].item(), new_predictions[tools.KEY_PITCHLIST])
+        #visualizer.update(new_predictions[tools.KEY_TIMES].item(), new_predictions[tools.KEY_PITCHLIST])
 
 # De-prime the buffer with features
 for i in range(feature_deprime_amount):
@@ -91,14 +96,22 @@ for i in range(feature_deprime_amount):
     new_predictions = run_single_frame(features, model, estimator)
     # Append the new predictions
     predictions = tools.dict_append(predictions, new_predictions)
+    current_time = new_predictions[tools.KEY_TIMES].item()
+    stacked_notes = estimator.estimators[-1].get_active_stacked_notes(current_time)
+    stacked_frets = tools.stacked_notes_to_frets(stacked_notes, profile.tuning)
+    visualizer.update(current_time, stacked_frets)
     # Call the visualizer's update loop
-    visualizer.update(new_predictions[tools.KEY_TIMES].item(), new_predictions[tools.KEY_PITCHLIST])
+    #visualizer.update(new_predictions[tools.KEY_TIMES].item(), new_predictions[tools.KEY_PITCHLIST])
+
+# Wait for 5 seconds before continuing
+time.sleep(5)
 
 # Stop and reset the feature stream
 feature_stream.reset_stream()
 
 # Evaluate the predictions and track the results
 results = evaluator.get_track_results(predictions, ground_truth)
+
 
 # Print results to the console
 print(results)

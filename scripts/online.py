@@ -9,8 +9,8 @@ import torch
 
 # Define path to model, audio, and ground-truth
 model_path = '/home/rockstar/Desktop/guitar-transcription/generated/experiments/TabCNN_GuitarSet_MelSpec/models/model-5000.pt'
-audio_path = '/home/rockstar/Desktop/Datasets/GuitarSet/audio_mono-mic/00_BN1-129-Eb_solo_mic.wav'
-gt_path = '/home/rockstar/Desktop/guitar-transcription/generated/data/GuitarSet/ground_truth/00_BN1-129-Eb_solo.npz'
+audio_path = '/home/rockstar/Desktop/Datasets/GuitarSet/audio_mono-mic/00_BN1-129-Eb_comp_mic.wav'
+gt_path = '/home/rockstar/Desktop/guitar-transcription/generated/data/GuitarSet/ground_truth/00_BN1-129-Eb_comp.npz'
 
 # Feature extraction parameters
 sample_rate = 22050
@@ -54,6 +54,12 @@ evaluator = ComboEvaluator([TablatureEvaluator(profile=profile),
 
 # Perform inference offline
 predictions = run_online(features, model, estimator)
+
+stacked_notes = predictions[tools.KEY_NOTES]
+stacked_notes = tools.apply_func_stacked_representation(stacked_notes, tools.transpose_batched_notes)
+stacked_notes = tools.apply_func_stacked_representation(stacked_notes, tools.batched_notes_to_notes)
+stacked_frets = tools.stacked_notes_to_frets(stacked_notes)
+tools.plot_guitar_tablature(stacked_frets)
 
 # Evaluate the predictions and track the results
 results = evaluator.get_track_results(predictions, ground_truth)
