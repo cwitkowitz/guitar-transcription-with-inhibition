@@ -9,7 +9,7 @@ import torch
 import time
 
 # Define path to model, audio, and ground-truth
-model_path = '/home/rockstar/Desktop/guitar-transcription/generated/experiments/TabCNN_GuitarSet_MelSpec/models/model-5000.pt'
+model_path = '/home/rockstar/Desktop/guitar-transcription/generated/experiments/baseline.pt'
 audio_path = '/home/rockstar/Desktop/Datasets/GuitarSet/audio_mono-mic/00_BN1-129-Eb_comp_mic.wav'
 gt_path = '/home/rockstar/Desktop/guitar-transcription/generated/data/GuitarSet/ground_truth/00_BN1-129-Eb_comp.npz'
 
@@ -57,11 +57,7 @@ feature_deprime_amount = 1
 # Disable toolbar globally
 tools.global_toolbar_disable()
 # Create a figure to continually update
-#visualizer = tools.StackedPitchListVisualizer(figsize=(10, 5),
-#                                              plot_frequency=10,
-#                                              time_window=5,
-#                                              colors=['red', 'green', 'black', 'red', 'green', 'black'],
-#                                              labels=tools.DEFAULT_GUITAR_LABELS)
+#visualizer = tools.StackedPitchListVisualizer(figsize=(10, 5), plot_frequency=10, time_window=5)
 visualizer = tools.GuitarTablatureVisualizer(figsize=(10, 5), plot_frequency=12, time_window=5)
 
 # Instantiate the audio stream and start streaming
@@ -80,13 +76,15 @@ while not feature_stream.query_finished():
         new_predictions = run_single_frame(features, model, estimator)
         # Append the new predictions
         predictions = tools.dict_append(predictions, new_predictions)
-        ###
+        # Get the current time from the predictions
         current_time = new_predictions[tools.KEY_TIMES].item()
+        # Get the current stacked note predictions
         stacked_notes = estimator.estimators[-1].get_active_stacked_notes(current_time)
+        # Convert the stacked notes to frets
         stacked_frets = tools.stacked_notes_to_frets(stacked_notes, profile.tuning)
-        visualizer.update(current_time, stacked_frets)
         # Call the visualizer's update loop
-        #visualizer.update(new_predictions[tools.KEY_TIMES].item(), new_predictions[tools.KEY_PITCHLIST])
+        visualizer.update(current_time, stacked_frets)
+        #visualizer.update(current_time, new_predictions[tools.KEY_PITCHLIST])
 
 # De-prime the buffer with features
 for i in range(feature_deprime_amount):
@@ -96,12 +94,15 @@ for i in range(feature_deprime_amount):
     new_predictions = run_single_frame(features, model, estimator)
     # Append the new predictions
     predictions = tools.dict_append(predictions, new_predictions)
+    # Get the current time from the predictions
     current_time = new_predictions[tools.KEY_TIMES].item()
+    # Get the current stacked note predictions
     stacked_notes = estimator.estimators[-1].get_active_stacked_notes(current_time)
+    # Convert the stacked notes to frets
     stacked_frets = tools.stacked_notes_to_frets(stacked_notes, profile.tuning)
-    visualizer.update(current_time, stacked_frets)
     # Call the visualizer's update loop
-    #visualizer.update(new_predictions[tools.KEY_TIMES].item(), new_predictions[tools.KEY_PITCHLIST])
+    visualizer.update(current_time, stacked_frets)
+    #visualizer.update(current_time, new_predictions[tools.KEY_PITCHLIST])
 
 # Wait for 5 seconds before continuing
 time.sleep(5)
@@ -111,7 +112,6 @@ feature_stream.reset_stream()
 
 # Evaluate the predictions and track the results
 results = evaluator.get_track_results(predictions, ground_truth)
-
 
 # Print results to the console
 print(results)

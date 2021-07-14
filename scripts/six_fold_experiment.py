@@ -2,14 +2,15 @@
 
 # My imports
 from amt_tools.datasets import GuitarSet
-from amt_tools.models import TabCNN
-from amt_tools.features import MelSpec
+from amt_tools.features import MelSpec, CQT
 
 from amt_tools.train import train
 from amt_tools.transcribe import *
 from amt_tools.evaluate import *
 
 import amt_tools.tools as tools
+
+from models.tabcnn_variants import TabCNNJoint
 
 # Regular imports
 from sacred.observers import FileStorageObserver
@@ -19,11 +20,11 @@ from sacred import Experiment
 import torch
 import os
 
-EX_NAME = '_'.join([TabCNN.model_name(),
+EX_NAME = '_'.join([TabCNNJoint.model_name(),
                     GuitarSet.dataset_name(),
-                    MelSpec.features_name()])
+                    CQT.features_name()])
 
-ex = Experiment('TabCNN w/ Real-Time MelSpec on GuitarSet w/ 6-fold Cross Validation')
+ex = Experiment('TabCNN w/ Joint Multipitch/Tablature Estimation on GuitarSet w/ 6-fold Cross Validation')
 
 
 @ex.config
@@ -80,11 +81,15 @@ def tabcnn_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoint
     model_complexity = 1
 
     # Create the cqt data processing module
-    data_proc = MelSpec(sample_rate=sample_rate,
+    """data_proc = MelSpec(sample_rate=sample_rate,
                         hop_length=hop_length,
                         n_mels=dim_in,
                         decibels=False,
-                        center=False)
+                        center=False)"""
+    data_proc = CQT(sample_rate=sample_rate,
+                    hop_length=hop_length,
+                    n_bins=dim_in,
+                    bins_per_octave=24)
 
     # Initialize the estimation pipeline
     validation_estimator = ComboEstimator([TablatureWrapper(profile=profile)])
@@ -95,11 +100,11 @@ def tabcnn_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoint
                                            TablatureEvaluator(profile=profile),
                                            SoftmaxAccuracy(key=tools.KEY_TABLATURE)])
 
+    # Keep all cached data/features here
+    gset_cache = os.path.join('..', 'generated', 'data')
+
     # Get a list of the GuitarSet splits
     splits = GuitarSet.available_splits()
-
-    # Keep all cached data/features under amt_models/generated for now
-    gset_cache = os.path.join('..', 'generated', 'data')
 
     # Initialize an empty dictionary to hold the average results across fold
     results = dict()
@@ -108,22 +113,20 @@ def tabcnn_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoint
     for k in range(6):
         # Determine the name of the splits being removed
         test_hold_out = '0' + str(k)
-        val_hold_out = '0' + str(5 - k)
 
         print('--------------------')
         print(f'Fold {test_hold_out}:')
 
         # Remove the hold out splits to get the partitions
         train_splits = splits.copy()
-        train_splits.remove(val_hold_out)
         train_splits.remove(test_hold_out)
-        val_splits = [val_hold_out]
         test_splits = [test_hold_out]
 
         print('Loading training partition...')
 
         # Create a dataset corresponding to the training partition
-        gset_train = GuitarSet(splits=train_splits,
+        gset_train = GuitarSet(base_dir=None,
+                               splits=train_splits,
                                hop_length=hop_length,
                                sample_rate=sample_rate,
                                data_proc=data_proc,
@@ -131,16 +134,6 @@ def tabcnn_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoint
                                num_frames=num_frames,
                                reset_data=reset_data,
                                save_loc=gset_cache)
-
-        # Create a dataset corresponding to the validation partition
-        gset_val = GuitarSet(splits=val_splits,
-                             hop_length=hop_length,
-                             sample_rate=sample_rate,
-                             data_proc=data_proc,
-                             profile=profile,
-                             num_frames=num_frames,
-                             reset_data=reset_data,
-                             save_loc=gset_cache)
 
         # Create a PyTorch data loader for the dataset
         train_loader = DataLoader(dataset=gset_train,
@@ -152,7 +145,8 @@ def tabcnn_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoint
         print('Loading testing partition...')
 
         # Create a dataset corresponding to the testing partition
-        gset_test = GuitarSet(splits=test_splits,
+        gset_test = GuitarSet(base_dir=None,
+                              splits=test_splits,
                               hop_length=hop_length,
                               sample_rate=sample_rate,
                               data_proc=data_proc,
@@ -163,7 +157,7 @@ def tabcnn_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoint
         print('Initializing model...')
 
         # Initialize a new instance of the model
-        tabcnn = TabCNN(dim_in, profile, data_proc.get_num_channels(), model_complexity, gpu_id)
+        tabcnn = TabCNNJoint(dim_in, profile, data_proc.get_num_channels(), model_complexity, 0.5, True, gpu_id)
         tabcnn.change_device()
         tabcnn.train()
 
@@ -185,7 +179,7 @@ def tabcnn_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoint
                        iterations=iterations,
                        checkpoints=checkpoints,
                        log_dir=model_dir,
-                       val_set=gset_val,
+                       val_set=gset_test,
                        estimator=validation_estimator,
                        evaluator=validation_evaluator)
 

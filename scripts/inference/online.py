@@ -8,7 +8,7 @@ import amt_tools.tools as tools
 import torch
 
 # Define path to model, audio, and ground-truth
-model_path = '/home/rockstar/Desktop/guitar-transcription/generated/experiments/TabCNN_GuitarSet_MelSpec/models/model-5000.pt'
+model_path = '/home/rockstar/Desktop/guitar-transcription/generated/experiments/baseline.pt'
 audio_path = '/home/rockstar/Desktop/Datasets/GuitarSet/audio_mono-mic/00_BN1-129-Eb_comp_mic.wav'
 gt_path = '/home/rockstar/Desktop/guitar-transcription/generated/data/GuitarSet/ground_truth/00_BN1-129-Eb_comp.npz'
 
