@@ -67,8 +67,8 @@ def config():
     ex.observers.append(FileStorageObserver(root_dir))
 
 @ex.automain
-def tabcnn_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoints,
-                     batch_size, learning_rate, gpu_id, reset_data, seed, root_dir):
+def train_baseline(sample_rate, hop_length, num_frames, iterations, checkpoints,
+                   batch_size, learning_rate, gpu_id, reset_data, seed, root_dir):
     # Seed everything with the same seed
     tools.seed_everything(seed)
 

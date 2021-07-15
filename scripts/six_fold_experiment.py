@@ -68,8 +68,8 @@ def config():
     ex.observers.append(FileStorageObserver(root_dir))
 
 @ex.automain
-def tabcnn_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoints,
-                     batch_size, learning_rate, gpu_id, reset_data, seed, root_dir):
+def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoints,
+                       batch_size, learning_rate, gpu_id, reset_data, seed, root_dir):
     # Seed everything with the same seed
     tools.seed_everything(seed)
 
@@ -80,7 +80,7 @@ def tabcnn_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoint
     dim_in = 192
     model_complexity = 1
 
-    # Create the cqt data processing module
+    # Create the data processing module
     """data_proc = MelSpec(sample_rate=sample_rate,
                         hop_length=hop_length,
                         n_mels=dim_in,

@@ -1,7 +1,9 @@
 # My imports
-from amt_tools.models import TabCNN, LogisticBank, SoftmaxGroups
+from amt_tools.models import TabCNN, LogisticBank
 
 import amt_tools.tools as tools
+
+from tablature_layers import ClassicTablatureEstimator
 
 # Regular imports
 from copy import deepcopy
@@ -105,7 +107,7 @@ class TabCNNMultipitch(TabCNN):
         return output
 
 
-class TabCNNJoint(TabCNNMultipitch):
+class TabCNNJointCustom(TabCNNMultipitch):
     """
     Implements TabCNN for joint (sequential) multipitch and tablature estimation.
     """
@@ -129,15 +131,22 @@ class TabCNNJoint(TabCNNMultipitch):
         self.threshold = threshold
         self.detach = detach
 
-        # Determine the number of distinct pitches
-        n_multipitch = self.profile.get_range_len()
+        self.tablature_layer = None
 
-        # Extract tablature parameters
-        num_groups = self.profile.get_num_dofs()
-        num_classes = self.profile.num_pitches + 1
+    def set_tablature_layer(self, tablature_layer):
+        """
+        Helper function to allow for overwriting the tablature layer.
 
-        # Initialize the tablature layer
-        self.tablature_layer = SoftmaxGroups(n_multipitch, num_groups, num_classes)
+        Note: if you wish to train the tablature layer, make sure it exists before calling self.parameters()
+        # TODO - make sure this doesn't cause problems with gradient or loss computation
+
+        Parameters
+        ----------
+        tablature_layer : TranscriptionModel or None
+          Preexisting tablature estimation layer to use for joint processing
+        """
+
+        self.tablature_layer = tablature_layer
 
     def forward(self, feats):
         """
@@ -165,19 +174,20 @@ class TabCNNJoint(TabCNNMultipitch):
         # Run the multipitch estimation steps
         output = super().forward(feats)
 
-        # Extract the multipitch activations from the output
-        multipitch = output[tools.KEY_MULTIPITCH]
+        if self.tablature_layer is not None:
+            # Extract the multipitch activations from the output
+            multipitch = output[tools.KEY_MULTIPITCH]
 
-        if self.threshold:
-            # Threshold the multipitch activations
-            multipitch = tools.threshold_activations(multipitch, self.threshold)
+            if self.threshold:
+                # Threshold the multipitch activations
+                multipitch = tools.threshold_activations(multipitch, self.threshold)
 
-        if self.detach:
-            # Do not propagate tablature gradient through multipitch estimation
-            multipitch = multipitch.detach()
+            if self.detach:
+                # Do not propagate tablature gradient through multipitch estimation
+                multipitch = multipitch.detach()
 
-        # Obtain the tablature estimate and add it to the output dictionary
-        output[tools.KEY_TABLATURE] = self.tablature_layer(multipitch)
+            # Obtain the tablature estimate and add it to the output dictionary
+            output[tools.KEY_TABLATURE] = self.tablature_layer(multipitch)
 
         return output
 
@@ -198,25 +208,42 @@ class TabCNNJoint(TabCNNMultipitch):
         """
 
         # Call the parent function to do the multipitch stuff
-        output = super().post_proc(batch)
+        batch[tools.KEY_OUTPUT] = super().post_proc(batch)
 
-        # Obtain the tablature estimation
-        tablature_est = output[tools.KEY_TABLATURE]
-
-        # Keep track of loss
-        total_loss = tools.unpack_dict(output, tools.KEY_LOSS)
-        total_loss = 0 if total_loss is None else total_loss[tools.KEY_LOSS_TOTAL]
-
-        # Check to see if ground-truth tablature is available
-        if tools.KEY_TABLATURE in batch.keys():
-            # Calculate the loss and add it to the total
-            total_loss += self.tablature_layer.get_loss(tablature_est, batch[tools.KEY_TABLATURE])
-
-        if total_loss:
-            # Add the loss to the output dictionary
-            output[tools.KEY_LOSS] = {tools.KEY_LOSS_TOTAL : total_loss}
-
-        # Finalize tablature estimation
-        output[tools.KEY_TABLATURE] = self.tablature_layer.finalize_output(tablature_est)
+        if self.tablature_layer is not None:
+            # Perform the post-processing steps of the tablature layer
+            output = self.tablature_layer.post_proc(batch)
+        else:
+            output = batch[tools.KEY_OUTPUT]
 
         return output
+
+
+class TabCNNJoint(TabCNNJointCustom):
+    """
+    Implements TabCNN for joint (sequential) multipitch and tablature estimation.
+    """
+
+    def __init__(self, dim_in, profile, in_channels, model_complexity=1, threshold=0.5, detach=True, device='cpu'):
+        """
+        Initialize the model and establish parameter defaults in function signature.
+
+        Parameters
+        ----------
+        See TabCNNJointCustom...
+        """
+
+        super().__init__(dim_in, profile, in_channels, model_complexity, 0.5, True, device)
+
+        # Fields for joint processing
+        self.threshold = threshold
+        self.detach = detach
+
+        # Determine the number of distinct pitches
+        n_multipitch = self.profile.get_range_len()
+
+        # Initialize the tablature layer as Softmax groups
+        tablature_layer = ClassicTablatureEstimator(n_multipitch, profile, device)
+
+        # Set the tablature layer to the Softmax groups
+        self.set_tablature_layer(tablature_layer)

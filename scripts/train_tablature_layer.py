@@ -1,0 +1,202 @@
+# Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
+
+# My imports
+from amt_tools.datasets import GuitarSet
+from amt_tools.features import MelSpec, CQT
+
+from amt_tools.train import train
+from amt_tools.evaluate import *
+
+import amt_tools.tools as tools
+
+from models.tablature_layers import ClassicTablatureEstimator
+
+# Private imports
+import sys
+sys.path.insert(1, '/home/frank/Desktop/guitar-transcription-private')
+from GuitarPro import GuitarProData
+
+# Regular imports
+from sacred.observers import FileStorageObserver
+from torch.utils.data import DataLoader
+from sacred import Experiment
+
+import torch
+import os
+
+EX_NAME = '_'.join([ClassicTablatureEstimator.model_name()])
+
+ex = Experiment('Separate Tablature Prediction Experiment')
+
+
+@ex.config
+def config():
+    # Number of samples per second of audio
+    sample_rate = 22050
+
+    # Number of samples between frames
+    hop_length = 512
+
+    # Number of consecutive frames within each example fed to the model
+    num_frames = 1000
+
+    # Number of training iterations to conduct
+    iterations = 5000
+
+    # How many equally spaced save/validation checkpoints - 0 to disable
+    checkpoints = 100
+
+    # Number of samples to gather for a batch
+    batch_size = 100
+
+    # The initial learning rate
+    learning_rate = 1.0
+
+    # The id of the gpu to use, if available
+    gpu_id = 0
+
+    # Flag to re-acquire ground-truth data and re-calculate-features
+    # This is useful if testing out different parameters
+    reset_data = False
+
+    # The random seed for this experiment
+    seed = 0
+
+    # Create the root directory for the experiment to hold train/transcribe/evaluate materials
+    root_dir = os.path.join('..', 'generated', 'experiments', EX_NAME)
+    os.makedirs(root_dir, exist_ok=True)
+
+    # Add a file storage observer for the log directory
+    ex.observers.append(FileStorageObserver(root_dir))
+
+@ex.automain
+def train_tablature(sample_rate, hop_length, num_frames, iterations, checkpoints,
+                    batch_size, learning_rate, gpu_id, reset_data, seed, root_dir):
+    # Seed everything with the same seed
+    tools.seed_everything(seed)
+
+    # Initialize the default guitar profile
+    profile = tools.GuitarProfile(num_frets=22)
+
+    # Create the data processing module
+    data_proc = MelSpec(sample_rate=sample_rate,
+                        hop_length=hop_length,
+                        n_mels=192,
+                        decibels=False,
+                        center=False)
+    """data_proc = CQT(sample_rate=sample_rate,
+                    hop_length=hop_length,
+                    n_bins=192,
+                    bins_per_octave=24)"""
+
+    # Initialize the evaluation pipeline
+    validation_evaluator = ComboEvaluator([LossWrapper(),
+                                           TablatureEvaluator(profile=profile),
+                                           SoftmaxAccuracy(key=tools.KEY_TABLATURE)])
+
+    """
+    # Get a list of the GuitarPro splits
+    splits = GuitarProData.available_splits()
+
+    # Initialize the validation splits
+    val_splits = ['a', 'b', 'c']
+    # Remove the validation splits to get the training partition
+    train_splits = splits.copy()
+    for split in val_splits:
+        train_splits.remove(split)
+    """
+
+    # Keep all cached data/features here
+    gpro_cache = os.path.join('..', 'generated', 'data')
+    gset_cache = os.path.join('..', 'generated', 'data')
+
+    print('Loading training partition...')
+
+    # Create a dataset corresponding to the training partition
+    gpro_train = GuitarProData(base_dir=None,
+                               #splits=train_splits,
+                               hop_length=hop_length,
+                               sample_rate=sample_rate,
+                               data_proc=data_proc,
+                               profile=profile,
+                               num_frames=num_frames,
+                               save_data=False,
+                               #reset_data=reset_data,
+                               store_data=False,
+                               save_loc=gpro_cache)
+
+    # Create a PyTorch data loader for the dataset
+    train_loader = DataLoader(dataset=gpro_train,
+                              batch_size=batch_size,
+                              shuffle=True,
+                              num_workers=0,
+                              drop_last=True)
+
+    """
+    print('Loading validation partition...')
+
+    # Create a dataset corresponding to the validation partition
+    gpro_val = GuitarProData(base_dir=None,
+                             splits=val_splits,
+                             hop_length=hop_length,
+                             sample_rate=sample_rate,
+                             data_proc=data_proc,
+                             profile=profile,
+                             reset_data=reset_data,
+                             store_data=False,
+                             save_loc=gpro_cache)
+    """
+
+    print('Loading testing partition...')
+
+    # Create a dataset corresponding to the testing partition
+    gset_test = GuitarSet(base_dir=None,
+                          hop_length=hop_length,
+                          sample_rate=sample_rate,
+                          data_proc=data_proc,
+                          profile=profile,
+                          reset_data=reset_data,
+                          store_data=False,
+                          save_loc=gset_cache)
+
+    print('Initializing model...')
+
+    # Initialize a new instance of the model
+    tabcnn = ClassicTablatureEstimator(profile.get_range_len(), profile, gpu_id)
+    tabcnn.change_device()
+    tabcnn.train()
+
+    # Initialize a new optimizer for the model parameters
+    optimizer = torch.optim.Adadelta(tabcnn.parameters(), learning_rate)
+
+    print('Training model...')
+
+    # Create a log directory for the training experiment
+    model_dir = os.path.join(root_dir, 'models')
+
+    # Set validation patterns for training
+    validation_evaluator.set_patterns(['loss', 'f1', 'tdr', 'acc'])
+
+    # Train the model
+    tabcnn = train(model=tabcnn,
+                   train_loader=train_loader,
+                   optimizer=optimizer,
+                   iterations=iterations,
+                   checkpoints=checkpoints,
+                   log_dir=model_dir,
+                   single_batch=True,
+                   val_set=gset_test,
+                   estimator=None,
+                   evaluator=validation_evaluator)
+
+    print('Transcribing and evaluating test partition...')
+
+    # Add a save directory to the evaluators and reset the patterns
+    validation_evaluator.set_save_dir(os.path.join(root_dir, 'results'))
+    validation_evaluator.set_patterns(None)
+
+    # Get the average results for the fold
+    results = validate(tabcnn, gset_test, evaluator=validation_evaluator, estimator=None)
+
+    # Log the average results for the fold in metrics.json
+    ex.log_scalar('Overall Results', results, 0)
