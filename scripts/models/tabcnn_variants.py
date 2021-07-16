@@ -187,6 +187,7 @@ class TabCNNJointCustom(TabCNNMultipitch):
                 multipitch = multipitch.detach()
 
             # Obtain the tablature estimate and add it to the output dictionary
+            # TODO - run_on_batch() instead?
             output[tools.KEY_TABLATURE] = self.tablature_layer(multipitch)
 
         return output
@@ -210,6 +211,7 @@ class TabCNNJointCustom(TabCNNMultipitch):
         # Call the parent function to do the multipitch stuff
         batch[tools.KEY_OUTPUT] = super().post_proc(batch)
 
+        # TODO - unnecessary if use run_on_batch() above?
         if self.tablature_layer is not None:
             # Perform the post-processing steps of the tablature layer
             output = self.tablature_layer.post_proc(batch)

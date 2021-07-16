@@ -132,3 +132,74 @@ class ClassicTablatureEstimator(TranscriptionModel):
         output[tools.KEY_TABLATURE] = self.tablature_layer.finalize_output(tablature_est)
 
         return output
+
+
+class ConvTablatureEstimator(ClassicTablatureEstimator):
+    """
+    Basic tablature layer with 1D convolution before the Softmax Groups.
+    """
+
+    def __init__(self, dim_in, num_channels, kernel_size, profile, device='cpu'):
+        """
+        Initialize the tablature layer and establish parameter defaults in function signature.
+
+        Parameters
+        ----------
+        See ClassicTablatureEstimator class...
+        """
+
+        # TODO - hook in model_complexity as a multiplier for num_channels and kernel_size
+
+        # Calculate the embedding size of the output of the convolutional layer
+        embedding_size = num_channels * dim_in
+
+        # Call super to initialize the Softmax groups
+        super().__init__(embedding_size, profile, device)
+
+        # Determine the padding amount on both sides
+        self.padding = (kernel_size // 2, kernel_size // 2 - (1 - kernel_size % 2))
+
+        # Instantiate a 1D convolutional layer
+        self.conv_layer = torch.nn.Conv1d(1, num_channels, kernel_size)
+
+    def forward(self, multipitch):
+        """
+        Perform the main processing steps for the variant.
+
+        Parameters
+        ----------
+        multipitch : Tensor (B x T x F)
+          Input features for a batch of tracks,
+          B - batch size
+          T - number of frames
+          F - number of features (unique pitches)
+
+        Returns
+        ----------
+        output : dict w/ tablature Tensor (B x T x O)
+          Dictionary containing tablature output
+          B - batch size,
+          T - number of time steps (frames
+          O - number of tablature neurons
+        """
+
+        # Initialize an empty dictionary to hold output
+        output = dict()
+
+        # Obtain the sizes of each dimension
+        B, T, F = multipitch.size()
+
+        # Collapse the frame dimension into the time dimension,
+        # add a channel dimension, and covert to float32
+        multipitch = multipitch.reshape(-1, 1, F).float()
+
+        # Pad the multipitch so that convolution produces the same number of features per channel
+        multipitch = torch.nn.functional.pad(multipitch, self.padding)
+
+        # Run the multipitch through the convolutional layer to obtain feature embeddings
+        embeddings = self.conv_layer(multipitch).reshape(B, T, -1)
+
+        # Compute the tablature estimate and add it to the output dictionary
+        output[tools.KEY_TABLATURE] = self.tablature_layer(embeddings)
+
+        return output

@@ -67,6 +67,7 @@ def config():
     # Add a file storage observer for the log directory
     ex.observers.append(FileStorageObserver(root_dir))
 
+
 @ex.automain
 def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoints,
                        batch_size, learning_rate, gpu_id, reset_data, seed, root_dir):
@@ -157,12 +158,12 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
         print('Initializing model...')
 
         # Initialize a new instance of the model
-        tabcnn = TabCNNJoint(dim_in, profile, data_proc.get_num_channels(), model_complexity, 0.5, True, gpu_id)
-        tabcnn.change_device()
-        tabcnn.train()
+        model = TabCNNJoint(dim_in, profile, data_proc.get_num_channels(), model_complexity, 0.5, True, gpu_id)
+        model.change_device()
+        model.train()
 
         # Initialize a new optimizer for the model parameters
-        optimizer = torch.optim.Adadelta(tabcnn.parameters(), learning_rate)
+        optimizer = torch.optim.Adadelta(model.parameters(), learning_rate)
 
         print('Training model...')
 
@@ -173,15 +174,15 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
         validation_evaluator.set_patterns(['loss', 'f1', 'tdr', 'acc'])
 
         # Train the model
-        tabcnn = train(model=tabcnn,
-                       train_loader=train_loader,
-                       optimizer=optimizer,
-                       iterations=iterations,
-                       checkpoints=checkpoints,
-                       log_dir=model_dir,
-                       val_set=gset_test,
-                       estimator=validation_estimator,
-                       evaluator=validation_evaluator)
+        model = train(model=model,
+                      train_loader=train_loader,
+                      optimizer=optimizer,
+                      iterations=iterations,
+                      checkpoints=checkpoints,
+                      log_dir=model_dir,
+                      val_set=gset_test,
+                      estimator=validation_estimator,
+                      evaluator=validation_evaluator)
 
         print('Transcribing and evaluating test partition...')
 
@@ -190,7 +191,7 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
         validation_evaluator.set_patterns(None)
 
         # Get the average results for the fold
-        fold_results = validate(tabcnn, gset_test, evaluator=validation_evaluator, estimator=validation_estimator)
+        fold_results = validate(model, gset_test, evaluator=validation_evaluator, estimator=validation_estimator)
 
         # Add the results to the tracked fold results
         results = append_results(results, fold_results)

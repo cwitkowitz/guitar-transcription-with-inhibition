@@ -66,6 +66,7 @@ def config():
     # Add a file storage observer for the log directory
     ex.observers.append(FileStorageObserver(root_dir))
 
+
 @ex.automain
 def train_baseline(sample_rate, hop_length, num_frames, iterations, checkpoints,
                    batch_size, learning_rate, gpu_id, reset_data, seed, root_dir):
@@ -120,12 +121,12 @@ def train_baseline(sample_rate, hop_length, num_frames, iterations, checkpoints,
     print('Initializing model...')
 
     # Initialize a new instance of the model
-    tabcnn = TabCNN(dim_in, profile, data_proc.get_num_channels(), model_complexity, gpu_id)
-    tabcnn.change_device()
-    tabcnn.train()
+    baseline = TabCNN(dim_in, profile, data_proc.get_num_channels(), model_complexity, gpu_id)
+    baseline.change_device()
+    baseline.train()
 
     # Initialize a new optimizer for the model parameters
-    optimizer = torch.optim.Adadelta(tabcnn.parameters(), learning_rate)
+    optimizer = torch.optim.Adadelta(baseline.parameters(), learning_rate)
 
     print('Training model...')
 
@@ -136,12 +137,12 @@ def train_baseline(sample_rate, hop_length, num_frames, iterations, checkpoints,
     validation_evaluator.set_patterns(['loss', 'f1', 'tdr', 'acc'])
 
     # Train the model
-    tabcnn = train(model=tabcnn,
-                   train_loader=train_loader,
-                   optimizer=optimizer,
-                   iterations=iterations,
-                   checkpoints=checkpoints,
-                   log_dir=model_dir,
-                   val_set=gset_train,
-                   estimator=validation_estimator,
-                   evaluator=validation_evaluator)
+    baseline = train(model=baseline,
+                     train_loader=train_loader,
+                     optimizer=optimizer,
+                     iterations=iterations,
+                     checkpoints=checkpoints,
+                     log_dir=model_dir,
+                     val_set=gset_train,
+                     estimator=validation_estimator,
+                     evaluator=validation_evaluator)
