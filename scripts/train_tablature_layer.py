@@ -38,7 +38,7 @@ def config():
     hop_length = 512
 
     # Number of consecutive frames within each example fed to the model
-    num_frames = 100
+    num_frames = 1000
 
     # Number of training iterations to conduct
     iterations = 5000
@@ -47,7 +47,7 @@ def config():
     checkpoints = 500
 
     # Number of samples to gather for a batch
-    batch_size = 250
+    batch_size = 125
 
     # The initial learning rate
     learning_rate = 1.0
@@ -107,7 +107,12 @@ def train_tablature(sample_rate, hop_length, num_frames, iterations, checkpoints
         train_splits.remove(split)
     """
 
+    # Base directories
+    #gpro_bsdir = os.path.join('/', 'mnt', 'bigstorage', 'data', 'gituru-datasets', 'dataset_GuitarPro')
+    #gset_bsdir = os.path.join('/', 'mnt', 'bigstorage', 'data', 'GuitarSet')
+
     # Keep all cached data/features here
+    #gset_cache = os.path.join(gset_bsdir, 'precomputed')
     gpro_cache = os.path.join('..', 'generated', 'data')
     gset_cache = os.path.join('..', 'generated', 'data')
 
@@ -124,7 +129,7 @@ def train_tablature(sample_rate, hop_length, num_frames, iterations, checkpoints
                                save_data=False,
                                #reset_data=reset_data,
                                store_data=False,
-                               save_loc=gpro_cache)
+                               )#save_loc=gpro_cache)
 
     # Create a PyTorch data loader for the dataset
     train_loader = DataLoader(dataset=gpro_train,
@@ -163,7 +168,7 @@ def train_tablature(sample_rate, hop_length, num_frames, iterations, checkpoints
     print('Initializing model...')
 
     # Initialize a new instance of the model
-    tablature_layer = ConvTablatureEstimator(profile.get_range_len(), 10, 13, profile, gpu_id)
+    tablature_layer = ConvTablatureEstimator(profile.get_range_len(), profile, 3, 0.5, gpu_id)
     tablature_layer.change_device()
     tablature_layer.train()
 

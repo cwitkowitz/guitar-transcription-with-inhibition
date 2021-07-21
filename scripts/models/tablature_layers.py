@@ -1,7 +1,7 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from amt_tools.models import TranscriptionModel, SoftmaxGroups
+from amt_tools.models import TranscriptionModel, SoftmaxGroups, LanguageModel
 import amt_tools.tools as tools
 
 # Regular imports
@@ -13,7 +13,6 @@ class ClassicTablatureEstimator(TranscriptionModel):
     A model wrapper for the Softmax groups output layer from
     TabCNN (http://archives.ismir.net/ismir2019/paper/000033.pdf).
     """
-
     def __init__(self, dim_in, profile, device='cpu'):
         """
         Initialize the tablature layer and establish parameter defaults in function signature.
@@ -138,17 +137,24 @@ class ConvTablatureEstimator(ClassicTablatureEstimator):
     """
     Basic tablature layer with 1D convolution before the Softmax Groups.
     """
-
-    def __init__(self, dim_in, num_channels, kernel_size, profile, device='cpu'):
+    def __init__(self, dim_in, profile, model_complexity=1, dropout=0., device='cpu'):
         """
         Initialize the tablature layer and establish parameter defaults in function signature.
 
         Parameters
         ----------
-        See ClassicTablatureEstimator class...
+        See ClassicTablatureEstimator class for others...
+        model_complexity : int, optional (default 1)
+          Scaling parameter for size of model's components
+        dropout : float
+          Dropout rate post-convolution (0 to disable)
         """
 
-        # TODO - hook in model_complexity as a multiplier for num_channels and kernel_size
+        # Kernel size should be long enough to span most intervals
+        kernel_size = 13
+
+        # Scale the number of channels by the model complexity
+        num_channels = 10 * model_complexity
 
         # Calculate the embedding size of the output of the convolutional layer
         embedding_size = num_channels * dim_in
@@ -156,11 +162,24 @@ class ConvTablatureEstimator(ClassicTablatureEstimator):
         # Call super to initialize the Softmax groups
         super().__init__(embedding_size, profile, device)
 
+        # Keep track of parameters
+        self.kernel_size = kernel_size
+        self.num_channels = num_channels
+        self.embedding_size = embedding_size
+
         # Determine the padding amount on both sides
-        self.padding = (kernel_size // 2, kernel_size // 2 - (1 - kernel_size % 2))
+        self.padding = (self.kernel_size // 2, self.kernel_size // 2 - (1 - self.kernel_size % 2))
 
         # Instantiate a 1D convolutional layer
-        self.conv_layer = torch.nn.Conv1d(1, num_channels, kernel_size)
+        self.conv_layer = torch.nn.Sequential(
+            # Convolutional layer
+            torch.nn.Conv1d(1, self.num_channels, self.kernel_size),
+            # Activation function
+            torch.nn.ReLU()
+        )
+
+        # Instantiate the dropout operation
+        self.dropout = torch.nn.Dropout(dropout)
 
     def forward(self, multipitch):
         """
@@ -198,6 +217,78 @@ class ConvTablatureEstimator(ClassicTablatureEstimator):
 
         # Run the multipitch through the convolutional layer to obtain feature embeddings
         embeddings = self.conv_layer(multipitch).reshape(B, T, -1)
+
+        # Perform dropout regularization
+        embeddings = self.dropout(embeddings)
+
+        # Compute the tablature estimate and add it to the output dictionary
+        output[tools.KEY_TABLATURE] = self.tablature_layer(embeddings)
+
+        return output
+
+
+class RecConvTablatureEstimator(ConvTablatureEstimator):
+    """
+    Tablature layer with 1D convolution and an LSTM before the Softmax Groups.
+    """
+
+    def __init__(self, dim_in, profile, model_complexity=1, dropout=0., device='cpu'):
+        """
+        Initialize the tablature layer and establish parameter defaults in function signature.
+
+        Parameters
+        ----------
+        See RecConvTablatureEstimator class for others...
+        """
+
+        # Call super to initialize the 1D Conv layer and Softmax groups
+        super().__init__(dim_in, profile, model_complexity, dropout, device)
+
+        # Instantiate the uni-directional LSTM to process the embeddings
+        self.lstm = LanguageModel(self.embedding_size, self.embedding_size, bidirectional=False)
+
+    def forward(self, multipitch):
+        """
+        Perform the main processing steps for the variant.
+
+        Parameters
+        ----------
+        multipitch : Tensor (B x T x F)
+          Input features for a batch of tracks,
+          B - batch size
+          T - number of frames
+          F - number of features (unique pitches)
+
+        Returns
+        ----------
+        output : dict w/ tablature Tensor (B x T x O)
+          Dictionary containing tablature output
+          B - batch size,
+          T - number of time steps (frames
+          O - number of tablature neurons
+        """
+
+        # Initialize an empty dictionary to hold output
+        output = dict()
+
+        # Obtain the sizes of each dimension
+        B, T, F = multipitch.size()
+
+        # Collapse the frame dimension into the time dimension,
+        # add a channel dimension, and covert to float32
+        multipitch = multipitch.reshape(-1, 1, F).float()
+
+        # Pad the multipitch so that convolution produces the same number of features per channel
+        multipitch = torch.nn.functional.pad(multipitch, self.padding)
+
+        # Run the multipitch through the convolutional layer to obtain feature embeddings
+        embeddings = self.conv_layer(multipitch).reshape(B, T, -1)
+
+        # Perform dropout regularization
+        embeddings = self.dropout(embeddings)
+
+        # Run the embeddings through the LSTM
+        embeddings = self.lstm(embeddings)
 
         # Compute the tablature estimate and add it to the output dictionary
         output[tools.KEY_TABLATURE] = self.tablature_layer(embeddings)
