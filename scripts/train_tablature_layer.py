@@ -47,7 +47,7 @@ def config():
     checkpoints = 500
 
     # Number of samples to gather for a batch
-    batch_size = 125
+    batch_size = 250
 
     # The initial learning rate
     learning_rate = 1.0
@@ -129,6 +129,8 @@ def train_tablature(sample_rate, hop_length, num_frames, iterations, checkpoints
                                save_data=False,
                                #reset_data=reset_data,
                                store_data=False,
+                               max_duration=10,
+                               augment_notes=True,
                                )#save_loc=gpro_cache)
 
     # Create a PyTorch data loader for the dataset
@@ -168,7 +170,7 @@ def train_tablature(sample_rate, hop_length, num_frames, iterations, checkpoints
     print('Initializing model...')
 
     # Initialize a new instance of the model
-    tablature_layer = ConvTablatureEstimator(profile.get_range_len(), profile, 3, 0.5, gpu_id)
+    tablature_layer = ConvTablatureEstimator(profile.get_range_len(), profile, 2, 0.0, gpu_id)
     tablature_layer.change_device()
     tablature_layer.train()
 
