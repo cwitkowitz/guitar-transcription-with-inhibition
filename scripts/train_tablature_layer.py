@@ -5,6 +5,7 @@ from amt_tools.datasets import GuitarSet
 from amt_tools.features import MelSpec, CQT
 
 from amt_tools.train import train
+from amt_tools.transcribe import *
 from amt_tools.evaluate import *
 
 import amt_tools.tools as tools
@@ -13,7 +14,7 @@ from models.tablature_layers import ConvTablatureEstimator
 
 # Private imports
 import sys
-sys.path.insert(1, '/home/frank/Desktop/guitar-transcription-private')
+sys.path.insert(0, '/home/rockstar/Desktop/guitar-transcription-private')
 from GuitarPro import GuitarProData
 
 # Regular imports
@@ -24,7 +25,7 @@ from sacred import Experiment
 import torch
 import os
 
-EX_NAME = '_'.join([ConvTablatureEstimator.model_name()])
+EX_NAME = '_'.join([ConvTablatureEstimator.model_name(), 'test'])
 
 ex = Experiment('Separate Tablature Prediction Experiment')
 
@@ -38,16 +39,16 @@ def config():
     hop_length = 512
 
     # Number of consecutive frames within each example fed to the model
-    num_frames = 1000
+    num_frames = 2000
 
     # Number of training iterations to conduct
-    iterations = 5000
+    iterations = 20000
 
     # How many equally spaced save/validation checkpoints - 0 to disable
-    checkpoints = 500
+    checkpoints = 200
 
     # Number of samples to gather for a batch
-    batch_size = 250
+    batch_size = 50
 
     # The initial learning rate
     learning_rate = 1.0
@@ -90,8 +91,12 @@ def train_tablature(sample_rate, hop_length, num_frames, iterations, checkpoints
                     n_bins=192,
                     bins_per_octave=24)"""
 
+    # Initialize the estimation pipeline
+    validation_estimator = ComboEstimator([TablatureWrapper(profile=profile)])
+
     # Initialize the evaluation pipeline
     validation_evaluator = ComboEvaluator([LossWrapper(),
+                                           MultipitchEvaluator(),
                                            TablatureEvaluator(profile=profile),
                                            SoftmaxAccuracy(key=tools.KEY_TABLATURE)])
 
@@ -130,7 +135,7 @@ def train_tablature(sample_rate, hop_length, num_frames, iterations, checkpoints
                                #reset_data=reset_data,
                                store_data=False,
                                max_duration=10,
-                               augment_notes=True,
+                               augment_notes=False,
                                )#save_loc=gpro_cache)
 
     # Create a PyTorch data loader for the dataset
@@ -170,7 +175,7 @@ def train_tablature(sample_rate, hop_length, num_frames, iterations, checkpoints
     print('Initializing model...')
 
     # Initialize a new instance of the model
-    tablature_layer = ConvTablatureEstimator(profile.get_range_len(), profile, 2, 0.0, gpu_id)
+    tablature_layer = ConvTablatureEstimator(profile.get_range_len(), profile, 3, 0.0, gpu_id)
     tablature_layer.change_device()
     tablature_layer.train()
 
@@ -194,7 +199,7 @@ def train_tablature(sample_rate, hop_length, num_frames, iterations, checkpoints
                             log_dir=model_dir,
                             single_batch=True,
                             val_set=gset_test,
-                            estimator=None,
+                            estimator=validation_estimator,
                             evaluator=validation_evaluator)
 
     print('Transcribing and evaluating test partition...')
@@ -204,7 +209,7 @@ def train_tablature(sample_rate, hop_length, num_frames, iterations, checkpoints
     validation_evaluator.set_patterns(None)
 
     # Get the average results for the fold
-    results = validate(tablature_layer, gset_test, evaluator=validation_evaluator, estimator=None)
+    results = validate(tablature_layer, gset_test, evaluator=validation_evaluator, estimator=validation_estimator)
 
     # Log the average results for the fold in metrics.json
     ex.log_scalar('Overall Results', results, 0)

@@ -47,13 +47,23 @@ class ClassicTablatureEstimator(TranscriptionModel):
           and all pre-processing steps complete
         """
 
-        # Obtain the tablature from the ground-truth and make sure it consists of integers
-        tablature = tools.unpack_dict(batch, tools.KEY_TABLATURE).to(torch.int32)
+        if tools.query_dict(batch, tools.KEY_MULTIPITCH):
+            # Extract the multipitch from the ground-truth
+            multipitch = batch[tools.KEY_MULTIPITCH]
+        elif tools.query_dict(batch, tools.KEY_TABLATURE):
+            # Obtain the tablature from the ground-truth and make sure it consists of integers
+            tablature = tools.unpack_dict(batch, tools.KEY_TABLATURE).to(torch.int32)
 
-        # Convert the tablature to stacked multipitch arrays
-        stacked_multipitch = tools.tablature_to_stacked_multi_pitch(tablature, self.profile)
-        # Collapse into a single multipitch array
-        multipitch = tools.stacked_multi_pitch_to_multi_pitch(stacked_multipitch)
+            # Convert the tablature to stacked multipitch arrays
+            stacked_multipitch = tools.tablature_to_stacked_multi_pitch(tablature, self.profile)
+            # Collapse into a single multipitch array
+            multipitch = tools.stacked_multi_pitch_to_multi_pitch(stacked_multipitch)
+        elif tools.query_dict(batch, tools.KEY_FEATS):
+            # Extract the multipitch from the ground-truth
+            multipitch = batch[tools.KEY_FEATS]
+        else:
+            # This will cause an error
+            multipitch = None
 
         # Flip the dimensions of the multipitch and add as features to the dictionary
         batch[tools.KEY_FEATS] = multipitch.transpose(-1, -2)
