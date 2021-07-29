@@ -3,7 +3,7 @@ from amt_tools.models import TabCNN, LogisticBank
 
 import amt_tools.tools as tools
 
-from tablature_layers import ClassicTablatureEstimator
+from .tablature_layers import ClassicTablatureEstimator
 
 # Regular imports
 from copy import deepcopy
@@ -95,6 +95,7 @@ class TabCNNMultipitch(TabCNN):
         # Check to see if ground-truth multipitch is available
         if tools.KEY_MULTIPITCH in batch.keys():
             # Calculate the loss and add it to the total
+            # TODO - add in with multipitch loss label?
             total_loss += multipitch_output_layer.get_loss(multipitch_est, batch[tools.KEY_MULTIPITCH])
 
         if total_loss:
@@ -176,7 +177,7 @@ class TabCNNJointCustom(TabCNNMultipitch):
 
         if self.tablature_layer is not None:
             # Extract the multipitch activations from the output
-            multipitch = output[tools.KEY_MULTIPITCH]
+            multipitch = output[tools.KEY_MULTIPITCH].clone()
 
             if self.threshold:
                 # Threshold the multipitch activations
@@ -187,8 +188,7 @@ class TabCNNJointCustom(TabCNNMultipitch):
                 multipitch = multipitch.detach()
 
             # Obtain the tablature estimate and add it to the output dictionary
-            # TODO - run_on_batch() instead?
-            output[tools.KEY_TABLATURE] = self.tablature_layer(multipitch)
+            output.update(self.tablature_layer(multipitch))
 
         return output
 
@@ -211,7 +211,6 @@ class TabCNNJointCustom(TabCNNMultipitch):
         # Call the parent function to do the multipitch stuff
         batch[tools.KEY_OUTPUT] = super().post_proc(batch)
 
-        # TODO - unnecessary if use run_on_batch() above?
         if self.tablature_layer is not None:
             # Perform the post-processing steps of the tablature layer
             output = self.tablature_layer.post_proc(batch)

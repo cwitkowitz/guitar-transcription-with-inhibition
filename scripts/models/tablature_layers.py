@@ -4,6 +4,8 @@
 from amt_tools.models import TranscriptionModel, SoftmaxGroups, LanguageModel
 import amt_tools.tools as tools
 
+from .softmax_inhibition import InhibitedSoftmaxGroups
+
 # Regular imports
 import torch
 
@@ -29,7 +31,11 @@ class ClassicTablatureEstimator(TranscriptionModel):
         num_classes = self.profile.num_pitches + 1
 
         # Initialize the tablature layer as Softmax groups
-        self.tablature_layer = SoftmaxGroups(dim_in, num_groups, num_classes)
+        #self.tablature_layer = SoftmaxGroups(dim_in, num_groups, num_classes)
+        pitch_ranges = torch.from_numpy(profile.get_dof_midi_range())
+        silent_class = torch.zeros((num_groups, 1))
+        membership = torch.cat((pitch_ranges, silent_class), dim=-1)
+        self.tablature_layer = InhibitedSoftmaxGroups(dim_in, num_groups, num_classes, membership)
 
     def pre_proc(self, batch):
         """
@@ -131,6 +137,7 @@ class ClassicTablatureEstimator(TranscriptionModel):
         # Check to see if ground-truth tablature is available
         if tools.KEY_TABLATURE in batch.keys():
             # Calculate the loss and add it to the total
+            # TODO - add in with tab loss label?
             total_loss += self.tablature_layer.get_loss(tablature_est, batch[tools.KEY_TABLATURE])
 
         if total_loss:

@@ -12,7 +12,7 @@ import sys
 
 # Define path to model, audio, and ground-truth
 model_path = '/home/rockstar/Desktop/guitar-transcription/generated/experiments/tablature.pt'
-jams_path = '/home/rockstar/Desktop/Datasets/GuitarSet/annotation/00_SS2-107-Ab_solo.jams'
+jams_path = '/home/rockstar/Desktop/Datasets/GuitarSet/annotation/00_BN1-129-Eb_solo.jams'
 
 # Feature extraction parameters
 sample_rate = 22050
@@ -24,7 +24,7 @@ device = torch.device(f'cuda:{gpu_id}'
                       if torch.cuda.is_available() else 'cpu')
 
 # Add the path to the model definitions
-sys.path.insert(1, '..')
+sys.path.insert(0, '..')
 
 # Load the model
 model = torch.load(model_path, map_location=device)

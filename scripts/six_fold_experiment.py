@@ -10,7 +10,7 @@ from amt_tools.evaluate import *
 
 import amt_tools.tools as tools
 
-from models.tabcnn_variants import TabCNNJoint
+from models.tabcnn_variants import TabCNNJointCustom
 
 # Regular imports
 from sacred.observers import FileStorageObserver
@@ -20,9 +20,9 @@ from sacred import Experiment
 import torch
 import os
 
-EX_NAME = '_'.join([TabCNNJoint.model_name(),
+EX_NAME = '_'.join([TabCNNJointCustom.model_name(),
                     GuitarSet.dataset_name(),
-                    CQT.features_name()])
+                    MelSpec.features_name()])
 
 ex = Experiment('TabCNN w/ Joint Multipitch/Tablature Estimation on GuitarSet w/ 6-fold Cross Validation')
 
@@ -75,31 +75,29 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
     tools.seed_everything(seed)
 
     # Initialize the default guitar profile
-    profile = tools.GuitarProfile()
+    profile = tools.GuitarProfile(num_frets=22)
 
     # Processing parameters
     dim_in = 192
     model_complexity = 1
 
     # Create the data processing module
-    """data_proc = MelSpec(sample_rate=sample_rate,
+    data_proc = MelSpec(sample_rate=sample_rate,
                         hop_length=hop_length,
                         n_mels=dim_in,
-                        decibels=False,
-                        center=False)"""
-    data_proc = CQT(sample_rate=sample_rate,
+                        decibels=True,
+                        center=False)
+    """data_proc = CQT(sample_rate=sample_rate,
                     hop_length=hop_length,
                     n_bins=dim_in,
-                    bins_per_octave=24)
+                    bins_per_octave=24)"""
 
     # Initialize the estimation pipeline
-    validation_estimator = ComboEstimator([TablatureWrapper(profile=profile)])
+    validation_estimator = None
 
     # Initialize the evaluation pipeline
     validation_evaluator = ComboEvaluator([LossWrapper(),
-                                           MultipitchEvaluator(),
-                                           TablatureEvaluator(profile=profile),
-                                           SoftmaxAccuracy(key=tools.KEY_TABLATURE)])
+                                           MultipitchEvaluator()])
 
     # Keep all cached data/features here
     gset_cache = os.path.join('..', 'generated', 'data')
@@ -158,7 +156,7 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
         print('Initializing model...')
 
         # Initialize a new instance of the model
-        model = TabCNNJoint(dim_in, profile, data_proc.get_num_channels(), model_complexity, 0.5, True, gpu_id)
+        model = TabCNNJointCustom(dim_in, profile, data_proc.get_num_channels(), model_complexity, 0.5, True, gpu_id)
         model.change_device()
         model.train()
 

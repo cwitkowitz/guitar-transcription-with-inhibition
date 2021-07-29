@@ -12,15 +12,19 @@ import amt_tools.tools as tools
 
 # Regular imports
 import torch
+import os
 
-model_path = '/home/rockstar/Desktop/guitar-transcription/generated/experiments/ConvTablatureEstimator_test/models/model-400.pt'
+multipitch_model_path = '../../generated/experiments/TabCNNJointCustom_GuitarSet_MelSpec/models/fold-0/model-50.pt'
+tablature_model_path = '../../generated/experiments/tablature.pt'
 
 gpu_id = 0
-device = torch.device(f'cuda:{gpu_id}'
-                      if torch.cuda.is_available() else 'cpu')
+device = torch.device(f'cuda:{gpu_id}' if torch.cuda.is_available() else 'cpu')
 
-model = torch.load(model_path, map_location=device)
+model = torch.load(multipitch_model_path, map_location=device)
 model.change_device(gpu_id)
+
+tablature_layer = torch.load(tablature_model_path)
+model.set_tablature_layer(tablature_layer)
 
 profile = model.profile
 
@@ -35,8 +39,7 @@ data_proc = MelSpec(sample_rate=sample_rate,
                     center=False)
 
 # Initialize the estimation pipeline
-validation_estimator = ComboEstimator([TablatureWrapper(profile),])
-                                       #NoteTranscriber(profile=profile)])
+validation_estimator = None
 
 # Initialize the evaluation pipeline
 validation_evaluator = ComboEvaluator([MultipitchEvaluator(),
@@ -46,7 +49,7 @@ validation_evaluator = ComboEvaluator([MultipitchEvaluator(),
                                        #NoteEvaluator(offset_ratio=0.2, key=tools.KEY_NOTE_OFF)])
 
 # Define expected path for calculated features and ground-truth
-features_gt_cache = os.path.join('..', 'generated', 'data')
+features_gt_cache = os.path.join('..', '..', 'generated', 'data')
 
 ##################################################
 # GuitarSet                                      #
@@ -54,6 +57,7 @@ features_gt_cache = os.path.join('..', 'generated', 'data')
 
 # Create a dataset object for GuitarSet
 gset_test = GuitarSet(base_dir=None,
+                      splits=['00'],
                       hop_length=hop_length,
                       sample_rate=sample_rate,
                       data_proc=data_proc,
