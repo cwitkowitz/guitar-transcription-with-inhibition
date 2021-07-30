@@ -31,11 +31,11 @@ class ClassicTablatureEstimator(TranscriptionModel):
         num_classes = self.profile.num_pitches + 1
 
         # Initialize the tablature layer as Softmax groups
-        #self.tablature_layer = SoftmaxGroups(dim_in, num_groups, num_classes)
-        pitch_ranges = torch.from_numpy(profile.get_dof_midi_range())
-        silent_class = torch.zeros((num_groups, 1))
-        membership = torch.cat((pitch_ranges, silent_class), dim=-1)
-        self.tablature_layer = InhibitedSoftmaxGroups(dim_in, num_groups, num_classes, membership)
+        self.tablature_layer = SoftmaxGroups(dim_in, num_groups, num_classes)
+        #pitch_ranges = torch.from_numpy(profile.get_dof_midi_range())
+        #silent_class = torch.zeros((num_groups, 1))
+        #membership = torch.cat((pitch_ranges, silent_class), dim=-1)
+        #self.tablature_layer = InhibitedSoftmaxGroups(dim_in, num_groups, num_classes, membership)
 
     def pre_proc(self, batch):
         """
@@ -176,8 +176,11 @@ class ConvTablatureEstimator(ClassicTablatureEstimator):
         # Calculate the embedding size of the output of the convolutional layer
         embedding_size = num_channels * dim_in
 
+        # Define the input dimensionality of the SoftmaxGroups
+        smax_dim_in = embedding_size // model_complexity
+
         # Call super to initialize the Softmax groups
-        super().__init__(embedding_size, profile, device)
+        super().__init__(smax_dim_in, profile, device)
 
         # Keep track of parameters
         self.kernel_size = kernel_size
@@ -261,8 +264,12 @@ class RecConvTablatureEstimator(ConvTablatureEstimator):
         # Call super to initialize the 1D Conv layer and Softmax groups
         super().__init__(dim_in, profile, model_complexity, dropout, device)
 
+        # Define the input and output dimensionality of the LSTM
+        lstm_dim_in = self.embedding_size
+        lstm_dim_out = self.embedding_size // model_complexity
+
         # Instantiate the uni-directional LSTM to process the embeddings
-        self.lstm = LanguageModel(self.embedding_size, self.embedding_size, bidirectional=False)
+        self.lstm = LanguageModel(lstm_dim_in, lstm_dim_out, bidirectional=False)
 
     def forward(self, multipitch):
         """

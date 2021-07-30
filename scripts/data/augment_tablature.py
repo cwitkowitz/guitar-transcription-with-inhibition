@@ -1,6 +1,8 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
+from amt_tools.transcribe import filter_notes_by_duration
+
 import amt_tools.tools as tools
 
 # Regular imports
@@ -96,5 +98,74 @@ def random_notes_drop(stacked_notes, drop_rate, rng=None):
 
         # Remove the dropped notes, convert back to regular notes, and add back to the stack
         stacked_notes[slc] = tools.batched_notes_to_notes(batched_notes[keep_indices])
+
+    return stacked_notes
+
+
+def random_onset_offset_shift(stacked_notes, std_dev, rng=None):
+    """
+    Randomly shift the onset and offset of notes across time.
+
+    Parameters
+    ----------
+    stacked_notes : dict
+      Dictionary containing (slice -> (pitches, intervals)) pairs
+    std_dev : float
+      Standard deviation of shifts
+    rng : NumPy RandomState
+      Random number generator to use for augmentation
+
+    Returns
+    ----------
+    stacked_notes : dict
+      Dictionary containing (slice -> (pitches, intervals)) pairs
+    """
+
+    if rng is None:
+        # Default the random state
+        rng = np.random
+
+    # Make a copy of the stacked notes for conversion
+    stacked_notes = deepcopy(stacked_notes)
+
+    # Loop through the stack of notes
+    for i, slc in enumerate(stacked_notes.keys()):
+        # Extract the note groups for the slice
+        pitches, intervals = stacked_notes[slc]
+
+        # Sample random noise to add to the note intervals
+        noise = rng.normal(scale=std_dev, size=intervals.shape)
+
+        # Add the noise to the intervals
+        intervals += noise
+
+        # Make sure the notes are sorted by onset
+        pitches, intervals = tools.sort_notes(pitches, intervals)
+
+        # Initialize an array to hold differentials
+        diffs = None
+
+        # Keep adjusting until there is no overlap
+        while diffs is None or np.sum(diffs):
+            if diffs is not None:
+                # Reshape the differentials and add their magnitude back to the intervals to fix overlap
+                intervals -= np.reshape(diffs, intervals.shape)
+
+            # Compute the differentials across the sorted intervals
+            diffs = intervals.flatten()[1:] - intervals.flatten()[:-1]
+
+            # Append zero for the first index
+            diffs = diffs if pitches.size == 0 else np.append([0], diffs)
+
+            # Positive differentials mean there are no problems
+            diffs[diffs >= 0] = 0
+
+        # TODO - clip notes at 0 and original duration?
+
+        # Make sure there are no notes with zero duration after the previous operations
+        pitches, intervals = filter_notes_by_duration(pitches, intervals)
+
+        # Add the augmented notes back to the stack
+        stacked_notes[slc] = pitches, intervals
 
     return stacked_notes
