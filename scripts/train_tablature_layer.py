@@ -10,7 +10,7 @@ from amt_tools.evaluate import *
 
 import amt_tools.tools as tools
 
-from models.tablature_layers import ConvTablatureEstimator
+from models.tablature_layers import RecConvTablatureEstimator
 
 # Private imports
 import sys
@@ -25,7 +25,7 @@ from sacred import Experiment
 import torch
 import os
 
-EX_NAME = '_'.join([ConvTablatureEstimator.model_name(), 'test'])
+EX_NAME = '_'.join([RecConvTablatureEstimator.model_name(), 'test'])
 
 ex = Experiment('Separate Tablature Prediction Experiment')
 
@@ -42,16 +42,16 @@ def config():
     num_frames = 2000
 
     # Number of training iterations to conduct
-    iterations = 20000
+    iterations = 50000
 
     # How many equally spaced save/validation checkpoints - 0 to disable
-    checkpoints = 200
+    checkpoints = 500
 
     # Number of samples to gather for a batch
-    batch_size = 50
+    batch_size = 20
 
     # The initial learning rate
-    learning_rate = 1.0
+    learning_rate = 1E-3
 
     # The id of the gpu to use, if available
     gpu_id = 0
@@ -135,7 +135,7 @@ def train_tablature(sample_rate, hop_length, num_frames, iterations, checkpoints
                                #reset_data=reset_data,
                                store_data=False,
                                max_duration=10,
-                               augment_notes=False,
+                               augment_notes=True,
                                )#save_loc=gpro_cache)
 
     # Create a PyTorch data loader for the dataset
@@ -175,12 +175,15 @@ def train_tablature(sample_rate, hop_length, num_frames, iterations, checkpoints
     print('Initializing model...')
 
     # Initialize a new instance of the model
-    tablature_layer = ConvTablatureEstimator(profile.get_range_len(), profile, 3, 0.0, gpu_id)
+    tablature_layer = RecConvTablatureEstimator(dim_in=profile.get_range_len(),
+                                             profile=profile,
+                                             model_complexity=3,
+                                             device=gpu_id)
     tablature_layer.change_device()
     tablature_layer.train()
 
     # Initialize a new optimizer for the model parameters
-    optimizer = torch.optim.Adadelta(tablature_layer.parameters(), learning_rate)
+    optimizer = torch.optim.Adam(tablature_layer.parameters(), learning_rate)
 
     print('Training model...')
 

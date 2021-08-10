@@ -11,8 +11,9 @@ import jams
 import sys
 
 # Define path to model, audio, and ground-truth
-model_path = '/home/rockstar/Desktop/guitar-transcription/generated/experiments/tablature.pt'
+model_path = '/home/rockstar/Desktop/guitar-transcription/generated/experiments/tablature_best.pt'
 jams_path = '/home/rockstar/Desktop/Datasets/GuitarSet/annotation/00_BN1-129-Eb_solo.jams'
+#jams_path = '/home/rockstar/Desktop/Datasets/GuitarProData/jams4/Led Zeppelin - Down By The Seaside -- Track 1.jams'
 
 # Feature extraction parameters
 sample_rate = 22050
@@ -89,11 +90,11 @@ stacked_frets_ref = tools.stacked_notes_to_frets(stacked_notes_ref)
 
 # Plot both sets of notes and add an appropriate title
 fig_est = tools.initialize_figure(interactive=False, figsize=(20, 5))
-fig_est = tools.plot_guitar_tablature(stacked_frets_est, fig=fig_est)
+fig_est = tools.plot_guitar_tablature(stacked_frets_est, fig=fig_est, x_bounds=[-1, 25])
 fig_est.suptitle('Estimated')
 
 fig_ref = tools.initialize_figure(interactive=False, figsize=(20, 5))
-fig_ref = tools.plot_guitar_tablature(stacked_frets_ref, fig=fig_ref)
+fig_ref = tools.plot_guitar_tablature(stacked_frets_ref, fig=fig_ref, x_bounds=[-1, 25])
 fig_ref.suptitle('Reference')
 
 # Evaluate the predictions and track the results

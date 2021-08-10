@@ -17,7 +17,7 @@ import os
 
 sys.path.insert(0, '..')
 
-model_path = '../../generated/experiments/tablature.pt'
+model_path = '../../generated/experiments/tablature_best.pt'
 
 gpu_id = 0
 device = torch.device(f'cuda:{gpu_id}' if torch.cuda.is_available() else 'cpu')
