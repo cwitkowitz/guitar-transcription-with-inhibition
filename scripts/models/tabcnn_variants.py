@@ -3,10 +3,82 @@ from amt_tools.models import TabCNN, LogisticBank
 
 import amt_tools.tools as tools
 
-from .tablature_layers import ClassicTablatureEstimator
+from .tablature_layers import ClassicTablatureEstimator, LogisticTablatureEstimator
 
 # Regular imports
 from copy import deepcopy
+
+
+class TabCNNLogistic(TabCNN):
+    """
+    Implements TabCNN with logistic output layer the output layer.
+    """
+
+    def __init__(self, dim_in, profile, in_channels, model_complexity=1,
+                 matrix_path=None, silence_activations=False, device='cpu'):
+        """
+        Initialize the model and establish parameter defaults in function signature.
+
+        Parameters
+        ----------
+        See TabCNN class for others...
+        matrix_path : str or None (optional)
+          Path to inhibition matrix
+        silence_activations : bool
+          Whether to explicitly model silence
+        """
+
+        super().__init__(dim_in, profile, in_channels, model_complexity, device)
+
+        # Replace the tablature layer with a logistic estimator
+        self.dense[-1] = LogisticTablatureEstimator(128, profile, None, False, device)
+
+    def pre_proc(self, batch):
+        """
+        TODO
+        """
+
+        if tools.query_dict(batch, tools.KEY_TABLATURE):
+            # Extract the tablature from the ground-truth
+            tablature = batch[tools.KEY_TABLATURE]
+            # Convert to a stacked multi pitch array
+            stacked_multi_pitch = tools.tablature_to_stacked_multi_pitch(tablature, self.profile)
+            # Convert to logistic activations
+            logistic = tools.stacked_multi_pitch_to_logistic(stacked_multi_pitch, self.profile,
+                                                             silence=self.dense[-1].no_string)
+            # Add back to the ground-truth
+            batch[tools.KEY_TABLATURE] = logistic
+
+        # Perform pre-processing steps of parent class
+        batch = super().pre_proc(batch)
+
+        return batch
+
+    def forward(self, feats):
+        """
+        TODO
+        """
+
+        # Run the standard steps
+        output = super().forward(feats)
+
+        # Do not double-pack the tablature
+        output = output.pop(tools.KEY_TABLATURE)
+
+        return output
+
+    def post_proc(self, batch):
+        """
+        TODO
+        """
+
+        # Obtain a pointer to the output layer
+        tablature_output_layer = self.dense[-1]
+
+        # Call the post-processing method of the tablature layer
+        output = tablature_output_layer.post_proc(batch)
+
+        return output
 
 
 class TabCNNMultipitch(TabCNN):

@@ -10,7 +10,7 @@ from amt_tools.evaluate import *
 
 import amt_tools.tools as tools
 
-from models.tabcnn_variants import TabCNNJointCustom
+from models.tabcnn_variants import TabCNNLogistic
 
 # Regular imports
 from sacred.observers import FileStorageObserver
@@ -20,11 +20,11 @@ from sacred import Experiment
 import torch
 import os
 
-EX_NAME = '_'.join([TabCNNJointCustom.model_name(),
+EX_NAME = '_'.join([TabCNNLogistic.model_name(),
                     GuitarSet.dataset_name(),
-                    MelSpec.features_name()])
+                    CQT.features_name(), 'test_0inh'])
 
-ex = Experiment('TabCNN w/ Joint Multipitch/Tablature Estimation on GuitarSet w/ 6-fold Cross Validation')
+ex = Experiment('TabCNN w/ Tablature Estimation on GuitarSet w/ 6-fold Cross Validation')
 
 
 @ex.config
@@ -39,16 +39,17 @@ def config():
     num_frames = 200
 
     # Number of training iterations to conduct
-    iterations = 2500
+    iterations = 10000
 
     # How many equally spaced save/validation checkpoints - 0 to disable
-    checkpoints = 50
+    checkpoints = 200
 
     # Number of samples to gather for a batch
     batch_size = 10
 
     # The initial learning rate
     learning_rate = 1.0
+    #learning_rate = 1E-3
 
     # The id of the gpu to use, if available
     gpu_id = 0
@@ -75,29 +76,31 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
     tools.seed_everything(seed)
 
     # Initialize the default guitar profile
-    profile = tools.GuitarProfile(num_frets=22)
+    profile = tools.GuitarProfile(num_frets=19)
 
     # Processing parameters
     dim_in = 192
     model_complexity = 1
 
     # Create the data processing module
-    data_proc = MelSpec(sample_rate=sample_rate,
+    """data_proc = MelSpec(sample_rate=sample_rate,
                         hop_length=hop_length,
                         n_mels=dim_in,
                         decibels=True,
-                        center=False)
-    """data_proc = CQT(sample_rate=sample_rate,
+                        center=False)"""
+    data_proc = CQT(sample_rate=sample_rate,
                     hop_length=hop_length,
                     n_bins=dim_in,
-                    bins_per_octave=24)"""
+                    bins_per_octave=24)
 
     # Initialize the estimation pipeline
-    validation_estimator = None
+    validation_estimator = ComboEstimator([TablatureWrapper(profile=profile)])
 
     # Initialize the evaluation pipeline
     validation_evaluator = ComboEvaluator([LossWrapper(),
-                                           MultipitchEvaluator()])
+                                           MultipitchEvaluator(),
+                                           TablatureEvaluator(profile=profile),
+                                           SoftmaxAccuracy(key=tools.KEY_TABLATURE)])
 
     # Keep all cached data/features here
     gset_cache = os.path.join('..', 'generated', 'data')
@@ -156,12 +159,13 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
         print('Initializing model...')
 
         # Initialize a new instance of the model
-        model = TabCNNJointCustom(dim_in, profile, data_proc.get_num_channels(), model_complexity, 0.5, True, gpu_id)
+        model = TabCNNLogistic(dim_in, profile, data_proc.get_num_channels(), model_complexity, gpu_id)
         model.change_device()
         model.train()
 
         # Initialize a new optimizer for the model parameters
         optimizer = torch.optim.Adadelta(model.parameters(), learning_rate)
+        #optimizer = torch.optim.Adam(model.parameters(), learning_rate)
 
         print('Training model...')
 

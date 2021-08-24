@@ -48,7 +48,7 @@ def config():
     checkpoints = 500
 
     # Number of samples to gather for a batch
-    batch_size = 20
+    batch_size = 2
 
     # The initial learning rate
     learning_rate = 1E-3

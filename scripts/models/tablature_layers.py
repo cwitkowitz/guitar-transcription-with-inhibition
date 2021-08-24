@@ -151,7 +151,7 @@ class LogisticTablatureEstimator(ClassicTablatureEstimator):
     """
     TODO
     """
-    def __init__(self, dim_in, profile, weights=None, device='cpu'):
+    def __init__(self, dim_in, profile, weights=None, no_string=False, device='cpu'):
         """
         TODO
         """
@@ -165,18 +165,26 @@ class LogisticTablatureEstimator(ClassicTablatureEstimator):
         # Calculate output dimensionality
         dim_out = num_strings * num_pitches
 
+        self.no_string = no_string
+
+        if self.no_string:
+            # Account for no-string activations
+            dim_out += num_strings
+
         # Initialize the tablature layer as a Logistic Bank
         self.tablature_layer = LogisticBank(dim_in, dim_out)
 
-        weights = torch.Tensor(np.load('/home/rockstar/Desktop/guitar-transcription/generated/inhibition_matrix.npz')['inh'])
+        #weights = torch.Tensor(np.load('/home/rockstar/Desktop/guitar-transcription/generated/inhibition_matrix_r5_aug.npz')['inh'])
+        weights = torch.Tensor(np.load('/home/rockstar/Desktop/guitar-transcription/generated/inhibition_matrix_standard.npz')['inh'])
+        weights = torch.reshape(torch.reshape(weights, (6, 23, 6, 23))[:, :20, :, :20], (120, 120))
 
         # Default the weights connect string groups
         if weights is None:
             # Create a identity matrix with size equal to number of strings
             weights = torch.eye(num_strings)
             # Repeat the matrix along both dimensions for each pitch
-            weights = torch.repeat_interleave(weights, num_pitches, dim=0)
-            weights = torch.repeat_interleave(weights, num_pitches, dim=1)
+            weights = torch.repeat_interleave(weights, num_pitches + int(self.no_string), dim=0)
+            weights = torch.repeat_interleave(weights, num_pitches + int(self.no_string), dim=1)
             # Subtract out self-connections
             weights = weights - torch.eye(dim_out)
 
@@ -220,7 +228,7 @@ class LogisticTablatureEstimator(ClassicTablatureEstimator):
             # Convert to a stacked multi pitch array
             stacked_multi_pitch = tools.tablature_to_stacked_multi_pitch(tablature, self.profile)
             # Convert to logistic activations
-            logistic = tools.stacked_multi_pitch_to_logistic(stacked_multi_pitch, self.profile)
+            logistic = tools.stacked_multi_pitch_to_logistic(stacked_multi_pitch, self.profile, silence=self.no_string)
             # Add back to the ground-truth
             batch[tools.KEY_TABLATURE] = logistic
 
@@ -238,7 +246,9 @@ class LogisticTablatureEstimator(ClassicTablatureEstimator):
         output = dict()
 
         # Compute the tablature estimate and add it to the output dictionary
-        output[tools.KEY_TABLATURE] = torch.sigmoid(self.tablature_layer(multipitch.float()))
+        #tablature_est = torch.sigmoid(self.tablature_layer(multipitch.float()))
+        #output[tools.KEY_TABLATURE] = 0.25 + torch.relu(tablature_est - 0.25)
+        output[tools.KEY_TABLATURE] = self.tablature_layer(multipitch.float())
 
         return output
 
@@ -269,12 +279,16 @@ class LogisticTablatureEstimator(ClassicTablatureEstimator):
             # Add the tablature loss to the total loss
             total_loss += tablature_loss
 
+        tablature_est = torch.sigmoid(tablature_est)
+
         # Determine if loss is being tracked
         if total_loss:
             # Determine the number of activations
             num_activations = self.weights.shape[-1]
 
             """
+            # No vectorization calculation of loss
+
             # Loop through each string fret combo
             for i in range(num_activations // 2):
                 for j in range(num_activations // 2):
@@ -310,31 +324,78 @@ class LogisticTablatureEstimator(ClassicTablatureEstimator):
             loss[tools.KEY_LOSS_TOTAL] = total_loss
             output[tools.KEY_LOSS] = loss
 
+        """
+        # Gate activations
+        tablature_est[tablature_est < 0.5] = 0
+        """
+
         # Obtain the final tablature estimate
+        """"""
+        # Argmax per string
+        tablature_est = tools.logistic_to_tablature(tablature_est.transpose(-2, -1), self.profile, self.no_string, silence_thr=0.25)
+        """"""
+
         """
-        # Threshold then softmax
+        # Binarize then softmax
         tablature_est = self.tablature_layer.finalize_output(tablature_est)
-        tablature_est = tools.logistic_to_tablature(tablature_est, self.profile)
+        tablature_est = tools.logistic_to_tablature(tablature_est, self.profile, self.no_string)
         """
 
-        """"""
-        # Choose maximum likelihood row
-        B, T, A = tablature_est.size()
-        likelihood = torch.mul(tablature_est.unsqueeze(-2), (1 - self.weights).unsqueeze(0).unsqueeze(0))
-        likelihood = likelihood.view(B, T, A, self.profile.get_num_dofs(), self.profile.num_pitches)
-        max_fret_vals, max_fret_idcs = torch.max(likelihood, dim=-1)
+        """
+        # 1st-order greedy choice algorithm
+        with torch.no_grad():
+            B, T, A = tablature_est.size()
+            likelihood = torch.mul(tablature_est.unsqueeze(-2), (1 - self.weights).unsqueeze(0).unsqueeze(0))#.to("cuda:1")
+            likelihood = likelihood.view(B, T, A, self.profile.get_num_dofs(), self.profile.num_pitches + int(self.no_string))
+            max_fret_vals, max_fret_idcs = torch.max(likelihood, dim=-1)
 
-        threshold = 5E-4
+            if not self.no_string:
+                threshold = 5E-4
 
-        max_fret_vals[max_fret_vals < threshold] = 0
-        max_fret_idcs[max_fret_vals < threshold] = -1
+                max_fret_vals[max_fret_vals < threshold] = 0
+                max_fret_idcs[max_fret_vals < threshold] = -1
 
-        best_combo_score = torch.sum(max_fret_vals, dim=-1)
-        best_combo_idx = torch.argmax(best_combo_score, dim=-1)
+            best_combo_score = torch.sum(max_fret_vals, dim=-1)
+            #best_combo_score = torch.sum(torch.sum(likelihood, dim=-1), dim=-1)
+            best_combo_idx = torch.argmax(best_combo_score, dim=-1)
 
-        idcs = torch.meshgrid(torch.arange(B), torch.arange(T)) + tuple([best_combo_idx.view(B, T).detach().cpu()])
-        tablature_est = max_fret_idcs[idcs].transpose(-1, -2)
-        """"""
+            idcs = torch.meshgrid(torch.arange(B), torch.arange(T)) + tuple([best_combo_idx.view(B, T).detach().cpu()])
+            tablature_est = max_fret_idcs[idcs].transpose(-1, -2) - int(self.no_string)
+        """
+
+        """
+        # 6th-order greedy choice algorithm
+        with torch.no_grad():
+            num_strings = self.profile.get_num_dofs()
+            num_classes = self.profile.num_pitches + int(self.no_string)
+            B, T, A = tablature_est.size()
+
+            #correlation = (1 - self.weights).unsqueeze(0).unsqueeze(0).to(tablature_est.device)
+            correlation = torch.tile((1 - self.weights), (B, T, 1, 1)).to(tablature_est.device)
+            for i in range(num_strings):
+                likelihood = torch.mul(tablature_est.unsqueeze(-2), correlation)
+                #likelihood = likelihood.view(B, T, A, num_strings, num_classes)
+
+                best_combo_score = torch.sum(likelihood, dim=-1)
+                best_combo_idx = torch.argmax(best_combo_score, dim=-1)
+                best_combo_idx = best_combo_idx.unsqueeze(-1).repeat((1, 1, A))
+                best_combo_str = best_combo_idx // num_classes
+
+                zero_idcs_str = num_classes * best_combo_str
+                zero_idcs_stp = zero_idcs_str + num_classes
+
+                tablature_idcs = torch.tile(torch.arange(A), (B, T, 1)).to(tablature_est.device)
+                gt_idcs = tablature_idcs >= zero_idcs_str
+                lt_idcs = tablature_idcs < zero_idcs_stp
+                non_max_idx = torch.logical_not(tablature_idcs == best_combo_idx)
+
+                zero_string_rows = torch.logical_and(gt_idcs, lt_idcs)
+                zero_non_max_rows = torch.logical_and(zero_string_rows, non_max_idx)
+
+                tablature_est[zero_non_max_rows] = 0
+                correlation[zero_string_rows] = 0
+            tablature_est = tools.logistic_to_tablature(tablature_est.transpose(-2, -1), self.profile, self.no_string, silence_thr=0.5)
+        """
 
         """
         # Ridge regression argmax_b {G = a^T b + b^T W b}
@@ -392,7 +453,7 @@ class ConvTablatureEstimator(LogisticTablatureEstimator):
         smax_dim_in = embedding_size // model_complexity
 
         # Call super to initialize the Softmax groups
-        super().__init__(smax_dim_in, profile, None, device)
+        super().__init__(smax_dim_in, profile, None, False, device)
 
         # Keep track of parameters
         self.kernel_size = kernel_size
