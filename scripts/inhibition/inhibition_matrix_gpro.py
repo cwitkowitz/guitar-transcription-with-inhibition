@@ -5,7 +5,7 @@ from amt_tools.features import MelSpec
 
 import amt_tools.tools as tools
 
-from GuitarSetAug import GuitarSetAug
+from tablature.GuitarProTabs import GuitarProTabs
 
 # Regular imports
 from tqdm import tqdm
@@ -13,25 +13,19 @@ from tqdm import tqdm
 import numpy as np
 import os
 
-# Select the fold to use
-fold = 1
-
 # Construct a path for saving the inhibition matrix
-save_path = os.path.join('..', '..', 'generated', f'inhibition_matrix_gset_fold_{fold}.npz')
+save_path = os.path.join('..', '..', 'generated', 'inhibition_matrix_no_string_3.npz')
 
 # Number of samples per second of audio
 sample_rate = 22050
 # Number of samples between frames
 hop_length = 512
 
-# Whether to include silent string activations
-silent_string = False
-
 # Initialize the default guitar profile
-profile = tools.GuitarProfile(num_frets=19)
+profile = tools.GuitarProfile(num_frets=22)
 
 # Determine the number of unique activations
-num_activations = profile.get_num_dofs() * profile.num_pitches + int(silent_string) * profile.get_num_dofs()
+num_activations = profile.get_num_dofs() * profile.num_pitches + profile.get_num_dofs()
 
 # Create the data processing module (only because TranscriptionDataset needs it)
 # TODO - it would be nice to not need this
@@ -41,21 +35,17 @@ data_proc = MelSpec(sample_rate=sample_rate,
                     decibels=False,
                     center=False)
 
-# Create the "training" splits
-train_splits = GuitarSetAug.available_splits().copy()
-train_splits.remove('0' + str(fold))
-
 # Create a dataset using all of the tablature data
-gset_train = GuitarSetAug(base_dir=None,
-                          splits=train_splits,
-                          hop_length=hop_length,
-                          sample_rate=sample_rate,
-                          num_frames=50,
-                          data_proc=data_proc,
-                          profile=profile,
-                          #reset_data=reset_data,
-                          save_loc=os.path.join('..', '..', 'generated', 'data'),
-                          augment_notes=True)
+gpro_train = GuitarProTabs(base_dir=None,
+                           hop_length=hop_length,
+                           sample_rate=sample_rate,
+                           num_frames=2000,
+                           data_proc=data_proc,
+                           profile=profile,
+                           save_data=False,
+                           store_data=False,
+                           max_duration=20,
+                           augment_notes=True)
 
 # Initialize the inhibition matrix with all zeros
 inhibition_matrix = np.zeros((num_activations, num_activations))
@@ -63,10 +53,10 @@ inhibition_matrix = np.zeros((num_activations, num_activations))
 valid_count = np.zeros(inhibition_matrix.shape)
 
 # Loop through all of the tracks in the tablature dataset
-#for i, track in enumerate(tqdm(gset_train)):
+#for i, track in enumerate(tqdm(gpro_train)):
 max_iter = 10000000
 for i in tqdm(range(max_iter)):
-    track = gset_train[gset_train.rng.randint(0, len(gset_train))]
+    track = gpro_train[gpro_train.rng.randint(0, len(gpro_train))]
     # Extract the tablature from the track data
     tablature = track[tools.KEY_TABLATURE]
     # Convert the tablature data to a stacked multi pitch array
@@ -74,17 +64,16 @@ for i in tqdm(range(max_iter)):
     # Remove silent frames from the stacked multi pitch array
     stacked_multi_pitch = stacked_multi_pitch[..., np.sum(np.sum(stacked_multi_pitch, axis=-2), axis=-2) > 0]
     # Convert the stacked multi pitch array to logistic (unique string/fret) activations
-    logistic = np.transpose(tools.stacked_multi_pitch_to_logistic(stacked_multi_pitch, profile, silence=silent_string))
+    logistic = np.transpose(tools.stacked_multi_pitch_to_logistic(stacked_multi_pitch, profile, silence=True))
 
-    if silent_string:
-        # Determine which indices in the logistic activations correspond to string silence
-        no_string_idcs = (profile.num_pitches + 1) * np.arange(profile.get_num_dofs())
-        # Determine how many strings are inactive at each frame
-        num_silent_strings = np.sum(logistic[..., no_string_idcs], axis=-1)
-        # Obtain index pairs for silent string activations where more than N=2 strings are silent
-        idx_pairs = np.meshgrid(np.where(num_silent_strings > 2)[0], no_string_idcs)
-        # Ignore silent string activations unless N or more strings are active
-        logistic[idx_pairs[0].flatten(), idx_pairs[1].flatten()] = 0
+    # Determine which indices in the logistic activations correspond to string silence
+    no_string_idcs = (profile.num_pitches + 1) * np.arange(profile.get_num_dofs())
+    # Determine how many strings are inactive at each frame
+    num_silent_strings = np.sum(logistic[..., no_string_idcs], axis=-1)
+    # Obtain index pairs for silent string activations where more than N=2 strings are silent
+    idx_pairs = np.meshgrid(np.where(num_silent_strings > 2)[0], no_string_idcs)
+    # Ignore silent string activations unless N or more strings are active
+    logistic[idx_pairs[0].flatten(), idx_pairs[1].flatten()] = 0
 
     # Count the number of frames each string/fret occurs in the tablature data
     single_occurrences = np.expand_dims(np.sum(logistic, axis=0), axis=0)
