@@ -11,52 +11,69 @@ from copy import deepcopy
 
 class TabCNNLogistic(TabCNN):
     """
-    Implements TabCNN with logistic output layer the output layer.
+    Implements TabCNN with a logistic output layer instead of the classic (softmax) output layer.
     """
 
-    def __init__(self, dim_in, profile, in_channels, model_complexity=1,
-                 matrix_path=None, silence_activations=False, device='cpu'):
+    def __init__(self, dim_in, profile, in_channels, model_complexity=1, matrix_path=None, device='cpu'):
         """
-        Initialize the model and establish parameter defaults in function signature.
+        Initialize the model and replace the final layer.
 
         Parameters
         ----------
         See TabCNN class for others...
         matrix_path : str or None (optional)
           Path to inhibition matrix
-        silence_activations : bool
-          Whether to explicitly model silence
         """
 
         super().__init__(dim_in, profile, in_channels, model_complexity, device)
 
-        # Replace the tablature layer with a logistic estimator
-        self.dense[-1] = LogisticTablatureEstimator(128, profile, None, False, device)
+        # Replace the tablature layer with a logistic tablature estimator
+        self.dense[-1] = LogisticTablatureEstimator(128, profile, matrix_path, device)
 
     def pre_proc(self, batch):
         """
-        TODO
+        Perform necessary pre-processing steps for the transcription model.
+
+        Parameters
+        ----------
+        batch : dict
+          Dictionary containing all relevant fields for a group of tracks
+
+        Returns
+        ----------
+        batch : dict
+          Dictionary with all PyTorch Tensors added to the appropriate device
+          and all pre-processing steps complete
         """
 
-        if tools.query_dict(batch, tools.KEY_TABLATURE):
-            # Extract the tablature from the ground-truth
-            tablature = batch[tools.KEY_TABLATURE]
-            # Convert to a stacked multi pitch array
-            stacked_multi_pitch = tools.tablature_to_stacked_multi_pitch(tablature, self.profile)
-            # Convert to logistic activations
-            logistic = tools.stacked_multi_pitch_to_logistic(stacked_multi_pitch, self.profile,
-                                                             silence=self.dense[-1].no_string)
-            # Add back to the ground-truth
-            batch[tools.KEY_TABLATURE] = logistic
+        # Perform output layer pre-processing steps
+        batch = self.dense[-1].pre_proc(batch)
 
-        # Perform pre-processing steps of parent class
+        # Perform TabCNN pre-processing steps
         batch = super().pre_proc(batch)
 
         return batch
 
     def forward(self, feats):
         """
-        TODO
+        Perform the main processing steps for TabCNN.
+
+        Parameters
+        ----------
+        feats : Tensor (B x T x F x W)
+          Input features for a batch of tracks,
+          B - batch size
+          T - number of frames
+          F - number of features (frequency bins)
+          W - frame width of each sample
+
+        Returns
+        ----------
+        output : dict w/ Tensor (B x T x O)
+          Dictionary containing tablature output
+          B - batch size,
+          T - number of time steps (frames),
+          O - number of output neurons (dim_out)
         """
 
         # Run the standard steps
@@ -69,7 +86,18 @@ class TabCNNLogistic(TabCNN):
 
     def post_proc(self, batch):
         """
-        TODO
+        Calculate loss and finalize model output.
+
+        Parameters
+        ----------
+        batch : dict
+          Dictionary including model output and potentially
+          ground-truth for a group of tracks
+
+        Returns
+        ----------
+        output : dict
+          Dictionary containing tablature as well as loss
         """
 
         # Obtain a pointer to the output layer
@@ -88,7 +116,7 @@ class TabCNNMultipitch(TabCNN):
 
     def __init__(self, dim_in, profile, in_channels, model_complexity=1, device='cpu'):
         """
-        Initialize the model and establish parameter defaults in function signature.
+        Initialize the model and replace the final layer.
 
         Parameters
         ----------
@@ -182,7 +210,7 @@ class TabCNNMultipitch(TabCNN):
 
 class TabCNNJointCustom(TabCNNMultipitch):
     """
-    Implements TabCNN for joint (sequential) multipitch and tablature estimation.
+    Implements TabCNN for joint (sequential) multipitch and custom tablature estimation.
     """
 
     def __init__(self, dim_in, profile, in_channels, model_complexity=1, threshold=0.5, detach=True, device='cpu'):
@@ -195,7 +223,7 @@ class TabCNNJointCustom(TabCNNMultipitch):
         threshold : float (0 <= threshold <= 1)
           Threshold for positive multipitch activations (0 to disable thresholding)
         detach : bool
-          Whether to disallow tablature estimation gradient to propagate through multipitch estimation
+          Whether to prevent tablature estimation gradient from propagating through multipitch estimation
         """
 
         super().__init__(dim_in, profile, in_channels, model_complexity, device)
@@ -204,6 +232,7 @@ class TabCNNJointCustom(TabCNNMultipitch):
         self.threshold = threshold
         self.detach = detach
 
+        # Initialize a null tablature output layer
         self.tablature_layer = None
 
     def set_tablature_layer(self, tablature_layer):
@@ -287,6 +316,7 @@ class TabCNNJointCustom(TabCNNMultipitch):
             # Perform the post-processing steps of the tablature layer
             output = self.tablature_layer.post_proc(batch)
         else:
+            # Extract the raw output
             output = batch[tools.KEY_OUTPUT]
 
         return output
