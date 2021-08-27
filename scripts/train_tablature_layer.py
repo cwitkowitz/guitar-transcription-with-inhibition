@@ -1,8 +1,7 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from amt_tools.datasets import GuitarSet
-from amt_tools.features import MelSpec, CQT
+from amt_tools.features import CQT
 
 from amt_tools.train import train
 from amt_tools.transcribe import *
@@ -10,12 +9,9 @@ from amt_tools.evaluate import *
 
 import amt_tools.tools as tools
 
-from models.tablature_layers import RecConvTablatureEstimator
-
-# Private imports
-import sys
-sys.path.insert(0, '/home/rockstar/Desktop/guitar-transcription-private')
-from GuitarPro import GuitarProData
+from models.symbolic_models import RecConvLogisticEstimator
+from tablature.GuitarProTabs import GuitarProTabs
+from tablature.GuitarSetTabs import GuitarSetTabs
 
 # Regular imports
 from sacred.observers import FileStorageObserver
@@ -25,7 +21,7 @@ from sacred import Experiment
 import torch
 import os
 
-EX_NAME = '_'.join([RecConvTablatureEstimator.model_name(), 'test'])
+EX_NAME = '_'.join([RecConvLogisticEstimator.model_name()])
 
 ex = Experiment('Separate Tablature Prediction Experiment')
 
@@ -42,16 +38,16 @@ def config():
     num_frames = 2000
 
     # Number of training iterations to conduct
-    iterations = 50000
+    iterations = 500000
 
     # How many equally spaced save/validation checkpoints - 0 to disable
     checkpoints = 500
 
     # Number of samples to gather for a batch
-    batch_size = 2
+    batch_size = 25
 
     # The initial learning rate
-    learning_rate = 1E-3
+    learning_rate = 1.0
 
     # The id of the gpu to use, if available
     gpu_id = 0
@@ -81,15 +77,10 @@ def train_tablature(sample_rate, hop_length, num_frames, iterations, checkpoints
     profile = tools.GuitarProfile(num_frets=22)
 
     # Create the data processing module
-    data_proc = MelSpec(sample_rate=sample_rate,
-                        hop_length=hop_length,
-                        n_mels=192,
-                        decibels=False,
-                        center=False)
-    """data_proc = CQT(sample_rate=sample_rate,
+    data_proc = CQT(sample_rate=sample_rate,
                     hop_length=hop_length,
                     n_bins=192,
-                    bins_per_octave=24)"""
+                    bins_per_octave=24)
 
     # Initialize the estimation pipeline
     validation_estimator = ComboEstimator([TablatureWrapper(profile=profile)])
@@ -124,7 +115,7 @@ def train_tablature(sample_rate, hop_length, num_frames, iterations, checkpoints
     print('Loading training partition...')
 
     # Create a dataset corresponding to the training partition
-    gpro_train = GuitarProData(base_dir=None,
+    gpro_train = GuitarProTabs(base_dir=None,
                                #splits=train_splits,
                                hop_length=hop_length,
                                sample_rate=sample_rate,
@@ -134,7 +125,7 @@ def train_tablature(sample_rate, hop_length, num_frames, iterations, checkpoints
                                save_data=False,
                                #reset_data=reset_data,
                                store_data=False,
-                               max_duration=10,
+                               max_duration=20,
                                augment_notes=True,
                                )#save_loc=gpro_cache)
 
@@ -163,27 +154,29 @@ def train_tablature(sample_rate, hop_length, num_frames, iterations, checkpoints
     print('Loading testing partition...')
 
     # Create a dataset corresponding to the testing partition
-    gset_test = GuitarSet(base_dir=None,
-                          hop_length=hop_length,
-                          sample_rate=sample_rate,
-                          data_proc=data_proc,
-                          profile=profile,
-                          reset_data=reset_data,
-                          store_data=False,
-                          save_loc=gset_cache)
+    gset_test = GuitarSetTabs(base_dir=None,
+                              hop_length=hop_length,
+                              sample_rate=sample_rate,
+                              data_proc=data_proc,
+                              profile=profile,
+                              reset_data=reset_data,
+                              store_data=False,
+                              save_loc=gset_cache)
 
     print('Initializing model...')
 
+    matrix_path = os.path.join('..', 'generated', 'inhibition_matrix_standard.npz')
+
     # Initialize a new instance of the model
-    tablature_layer = RecConvTablatureEstimator(dim_in=profile.get_range_len(),
-                                             profile=profile,
-                                             model_complexity=3,
-                                             device=gpu_id)
+    tablature_layer = RecConvLogisticEstimator(profile=profile,
+                                               model_complexity=3,
+                                               matrix_path=matrix_path,
+                                               device=gpu_id)
     tablature_layer.change_device()
     tablature_layer.train()
 
     # Initialize a new optimizer for the model parameters
-    optimizer = torch.optim.Adam(tablature_layer.parameters(), learning_rate)
+    optimizer = torch.optim.Adadelta(tablature_layer.parameters(), learning_rate)
 
     print('Training model...')
 

@@ -4,6 +4,8 @@
 from amt_tools.models import TranscriptionModel, SoftmaxGroups, LogisticBank
 import amt_tools.tools as tools
 
+from inhibition.inhibition_matrix import load_inhibition_matrix, trim_inhibition_matrix
+
 # Regular imports
 import numpy as np
 import torch
@@ -248,17 +250,10 @@ class LogisticTablatureEstimator(TablatureEstimator):
             # Subtract out self-connections
             inhibition_matrix = inhibition_matrix - torch.eye(dim_out)
         else:
-            # Load the inhibition matrix
-            inhibition_matrix = torch.Tensor(np.load(matrix_path)['inh'])
-            # Determine how many pitches were originally included in the matrix
-            num_pitches_ = inhibition_matrix.shape[-1] // num_strings
-            # Temporarily re-shape the matrix to be 4D
-            inhibition_matrix = torch.reshape(inhibition_matrix, (num_strings, num_pitches_,
-                                                                  num_strings, num_pitches_))
-            # Throw away any extraneous frets
-            inhibition_matrix = inhibition_matrix[:, :num_pitches, :, :num_pitches]
-            # View the matrix as a square (2D) again
-            inhibition_matrix = torch.reshape(inhibition_matrix, (dim_out, dim_out))
+            # Load the inhibition matrix at the given path
+            inhibition_matrix = load_inhibition_matrix(matrix_path)
+            # Trim the inhibition matrix to match the chosen profile
+            inhibition_matrix = torch.Tensor(trim_inhibition_matrix(inhibition_matrix, num_strings, num_pitches))
 
         # Initialize the inhibition matrix and add it to the specified device
         self.inhibition_matrix = inhibition_matrix.to(self.device)
