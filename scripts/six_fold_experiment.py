@@ -2,7 +2,7 @@
 
 # My imports
 from amt_tools.datasets import GuitarSet
-from amt_tools.features import MelSpec, CQT
+from amt_tools.features import CQT
 
 from amt_tools.train import train
 from amt_tools.transcribe import *
@@ -22,7 +22,7 @@ import os
 
 EX_NAME = '_'.join([TabCNNLogistic.model_name(),
                     GuitarSet.dataset_name(),
-                    CQT.features_name(), 'test_0inh'])
+                    CQT.features_name()])
 
 ex = Experiment('TabCNN w/ Tablature Estimation on GuitarSet w/ 6-fold Cross Validation')
 
@@ -39,17 +39,16 @@ def config():
     num_frames = 200
 
     # Number of training iterations to conduct
-    iterations = 10000
+    iterations = 2500
 
     # How many equally spaced save/validation checkpoints - 0 to disable
-    checkpoints = 200
+    checkpoints = 50
 
     # Number of samples to gather for a batch
-    batch_size = 10
+    batch_size = 30
 
     # The initial learning rate
     learning_rate = 1.0
-    #learning_rate = 1E-3
 
     # The id of the gpu to use, if available
     gpu_id = 0
@@ -83,11 +82,6 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
     model_complexity = 1
 
     # Create the data processing module
-    """data_proc = MelSpec(sample_rate=sample_rate,
-                        hop_length=hop_length,
-                        n_mels=dim_in,
-                        decibels=True,
-                        center=False)"""
     data_proc = CQT(sample_rate=sample_rate,
                     hop_length=hop_length,
                     n_bins=dim_in,
@@ -159,13 +153,16 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
         print('Initializing model...')
 
         # Initialize a new instance of the model
-        model = TabCNNLogistic(dim_in, profile, data_proc.get_num_channels(), model_complexity, gpu_id)
+        model = TabCNNLogistic(dim_in=dim_in,
+                               profile=profile,
+                               in_channels=data_proc.get_num_channels(),
+                               model_complexity=model_complexity,
+                               device=gpu_id)
         model.change_device()
         model.train()
 
         # Initialize a new optimizer for the model parameters
         optimizer = torch.optim.Adadelta(model.parameters(), learning_rate)
-        #optimizer = torch.optim.Adam(model.parameters(), learning_rate)
 
         print('Training model...')
 

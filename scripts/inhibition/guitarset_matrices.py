@@ -1,11 +1,11 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from amt_tools.features import MelSpec
+from amt_tools.features import CQT
 
 import amt_tools.tools as tools
 
-from .inhibition_matrix import InhibitionMatrixTrainer
+from inhibition_matrix import InhibitionMatrixTrainer
 from tablature.GuitarSetTabs import GuitarSetTabs
 
 # Regular imports
@@ -18,11 +18,11 @@ hop_length = 512
 
 # Create the data processing module (only because TranscriptionDataset needs it)
 # TODO - it would be nice to not need this -- see TODO in datasets/common.py
-data_proc = MelSpec(sample_rate=sample_rate,
-                    hop_length=hop_length,
-                    n_mels=192,
-                    decibels=False,
-                    center=False)
+# Create the data processing module
+data_proc = CQT(sample_rate=sample_rate,
+                hop_length=hop_length,
+                n_bins=192,
+                bins_per_octave=24)
 
 # Initialize the default guitar profile
 profile = tools.GuitarProfile(num_frets=22)
@@ -43,19 +43,19 @@ for k in range(6):
     train_splits.remove(test_hold_out)
 
     # Construct a path for saving the inhibition matrix
-    save_path = os.path.join('..', '..', 'generated', f'inhibition_matrix_guitarset_{test_hold_out}.npz')
+    save_path = os.path.join('..', '..', 'generated', f'inhibition_matrix_guitarset_{test_hold_out}_no_aug.npz')
 
     # Create a dataset using all of the GuitarSet tablature data, excluding the holdout fold
     gset_train = GuitarSetTabs(base_dir=None,
                                splits=train_splits,
                                hop_length=hop_length,
                                sample_rate=sample_rate,
+                               num_frames=None,
                                data_proc=data_proc,
                                profile=profile,
-                               num_frames=None,
                                save_data=False,
                                store_data=False,
-                               augment_notes=True)
+                               augment_notes=False)
 
     # Obtain an inhibition matrix from the GuitarSet data
-    InhibitionMatrixTrainer(profile, gset_train, save_path).train(residual_threshold=1E-2)
+    InhibitionMatrixTrainer(profile, gset_train, save_path).train(residual_threshold=None)

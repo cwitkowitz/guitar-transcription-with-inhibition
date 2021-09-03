@@ -9,9 +9,9 @@ from .SymbolicTablature import SymbolicTablature
 import os
 
 
-class GuitarProTabs(SymbolicTablature):
+class DadaGP(SymbolicTablature):
     """
-    Implements a wrapper for the GuitarPro dataset.
+    Implements a wrapper for the DadaGP dataset.
     """
 
     def __init__(self, base_dir=None, splits=None, hop_length=512, sample_rate=44100, data_proc=None,
@@ -43,15 +43,14 @@ class GuitarProTabs(SymbolicTablature):
           Names of tracks within the given partition
         """
 
-        # Construct a path to GuitarPro jams directory
-        jams_dir = os.path.join(self.base_dir, 'jams4')
-        # Extract the names of all the files in the directory
-        jams_paths = os.listdir(jams_dir)
-        # Sort all of the tracks alphabetically
-        jams_paths.sort()
+        # Determine which sub-splits to reference for the split
+        sub_splits = self.train_sub_splits() if split == 'train' else self.val_sub_splits()
 
-        # Remove the JAMS file extension from the file names and take only those in split
-        tracks = [os.path.splitext(path)[0] for path in jams_paths if split == path[0].lower()]
+        # Obtain a list of all of the JAMS files
+        jams_files = os.listdir(os.path.join(self.base_dir, 'jams'))
+
+        # Reduce the list of files to those in the split and remove the JAMS extension
+        tracks = [os.path.splitext(track)[0] for track in jams_files if self.get_first_track_char(track) in sub_splits]
 
         return tracks
 
@@ -71,34 +70,119 @@ class GuitarProTabs(SymbolicTablature):
         """
 
         # Get the path to the annotations
-        jams_path = os.path.join(self.base_dir, 'jams4', f'{track}.{tools.JAMS_EXT}')
+        jams_path = os.path.join(self.base_dir, 'jams', f'{track}.{tools.JAMS_EXT}')
 
         return jams_path
+
+    @staticmethod
+    def get_first_track_char(track):
+        """
+        Obtain the first valid character for a track name.
+
+        Parameters
+        ----------
+        track : string
+          GuitarSet track name
+
+        Returns
+        ----------
+        first_char : string
+          First valid character within the track name
+        """
+
+        # Get the list of available sub-splits (sub-directories)
+        valid_chars = DadaGP.available_sub_splits()
+
+        # Initialize a character index
+        char_idx = 0
+
+        # Default the first valid character
+        first_char = None
+
+        # Loop until a valid character is found or the end of the track name
+        while first_char is None and char_idx < len(track):
+            # Get the character at the current index and capitalize
+            curr_char = track[char_idx].upper()
+
+            if curr_char in valid_chars:
+                # Set the first character is it is valid
+                first_char = curr_char
+
+            # Increment the character index
+            char_idx += 1
+
+        return first_char
+
+    @staticmethod
+    def available_sub_splits():
+        """
+        Obtain a list of all sub-splits (aplhanumeric).
+
+        Returns
+        ----------
+        sub_splits : list of strings
+          Sub-directories within the base directory
+        """
+
+        sub_splits = ['1', '2', '3', '4', '5', '6', '7', '8',
+                      'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
+                      'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
+                      'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
+                      'Y', 'Z']
+
+        return sub_splits
+
+    @staticmethod
+    def train_sub_splits():
+        """
+        Obtain a list of sub-splits (aplhanumeric) that belong to the training set.
+
+        Returns
+        ----------
+        sub_splits : list of strings
+          First character of JAMS files
+        """
+
+        # Compliment of the validation sub-splits w.r.t. all available splits
+        sub_splits = [ss for ss in DadaGP.available_sub_splits() if ss not in DadaGP.val_sub_splits()]
+
+        return sub_splits
+
+    @staticmethod
+    def val_sub_splits():
+        """
+        Obtain a list of sub-splits (aplhanumeric) that belong to the validation set.
+
+        Returns
+        ----------
+        sub_splits : list of strings
+          First character of JAMS files
+        """
+
+        sub_splits = ['T', 'U', 'V', 'W', 'X', 'Y', 'Z']
+
+        return sub_splits
 
     @staticmethod
     def available_splits():
         """
         Obtain a list of possible splits. Currently, the splits
-        are by first character (not case-sensitive) of track.
+        are by training and validation partitions.
 
         Returns
         ----------
         splits : list of strings
-          First characters of track names
+          Tags for training and validation split
         """
 
-        splits = ['(', '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-                  '_', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k',
-                  'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w',
-                  'x', 'y', 'z']
+        splits = ['train', 'val']
 
         return splits
 
     @staticmethod
     def download(save_dir):
         """
-        Download GuitarPro dataset to a specified location.
-        TODO - we can probably set this up
+        Download DadaGP dataset to a specified location.
         """
 
-        return NotImplementedError
+        assert False, 'Please see \'https://github.com/dada-bots/dadaGP\' for steps to acquire DadaGP...'

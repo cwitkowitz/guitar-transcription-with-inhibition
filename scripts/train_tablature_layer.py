@@ -9,8 +9,8 @@ from amt_tools.evaluate import *
 
 import amt_tools.tools as tools
 
-from models.symbolic_models import RecConvLogisticEstimator
-from tablature.GuitarProTabs import GuitarProTabs
+from models.symbolic_models import RecConvClassicEstimator
+from tablature.GuitarProTabs import DadaGP
 from tablature.GuitarSetTabs import GuitarSetTabs
 
 # Regular imports
@@ -21,7 +21,7 @@ from sacred import Experiment
 import torch
 import os
 
-EX_NAME = '_'.join([RecConvLogisticEstimator.model_name()])
+EX_NAME = '_'.join([RecConvClassicEstimator.model_name()])
 
 ex = Experiment('Separate Tablature Prediction Experiment')
 
@@ -38,10 +38,10 @@ def config():
     num_frames = 2000
 
     # Number of training iterations to conduct
-    iterations = 500000
+    iterations = 200000
 
     # How many equally spaced save/validation checkpoints - 0 to disable
-    checkpoints = 500
+    checkpoints = 200
 
     # Number of samples to gather for a batch
     batch_size = 25
@@ -104,7 +104,7 @@ def train_tablature(sample_rate, hop_length, num_frames, iterations, checkpoints
     """
 
     # Base directories
-    #gpro_bsdir = os.path.join('/', 'mnt', 'bigstorage', 'data', 'gituru-datasets', 'dataset_GuitarPro')
+    #gpro_bsdir = os.path.join('/', 'mnt', 'bigstorage', 'data', 'DadaGP')
     #gset_bsdir = os.path.join('/', 'mnt', 'bigstorage', 'data', 'GuitarSet')
 
     # Keep all cached data/features here
@@ -115,19 +115,17 @@ def train_tablature(sample_rate, hop_length, num_frames, iterations, checkpoints
     print('Loading training partition...')
 
     # Create a dataset corresponding to the training partition
-    gpro_train = GuitarProTabs(base_dir=None,
-                               #splits=train_splits,
-                               hop_length=hop_length,
-                               sample_rate=sample_rate,
-                               data_proc=data_proc,
-                               profile=profile,
-                               num_frames=num_frames,
-                               save_data=False,
-                               #reset_data=reset_data,
-                               store_data=False,
-                               max_duration=20,
-                               augment_notes=True,
-                               )#save_loc=gpro_cache)
+    gpro_train = DadaGP(base_dir=None,
+    #gpro_train = DadaGP(base_dir=gpro_bsdir,
+                        splits=['train'],
+                        hop_length=hop_length,
+                        sample_rate=sample_rate,
+                        num_frames=num_frames,
+                        data_proc=data_proc,
+                        profile=profile,
+                        save_data=False,
+                        store_data=False,
+                        augment_notes=False)
 
     # Create a PyTorch data loader for the dataset
     train_loader = DataLoader(dataset=gpro_train,
@@ -136,42 +134,44 @@ def train_tablature(sample_rate, hop_length, num_frames, iterations, checkpoints
                               num_workers=0,
                               drop_last=True)
 
-    """
     print('Loading validation partition...')
 
     # Create a dataset corresponding to the validation partition
-    gpro_val = GuitarProData(base_dir=None,
-                             splits=val_splits,
-                             hop_length=hop_length,
-                             sample_rate=sample_rate,
-                             data_proc=data_proc,
-                             profile=profile,
-                             reset_data=reset_data,
-                             store_data=False,
-                             save_loc=gpro_cache)
-    """
+    gpro_val = DadaGP(base_dir=None,
+    #gpro_val = DadaGP(base_dir=gpro_bsdir,
+                      splits=['val'],
+                      hop_length=hop_length,
+                      sample_rate=sample_rate,
+                      num_frames=None,
+                      data_proc=data_proc,
+                      profile=profile,
+                      save_data=False,
+                      store_data=False,
+                      augment_notes=False)
 
     print('Loading testing partition...')
 
     # Create a dataset corresponding to the testing partition
     gset_test = GuitarSetTabs(base_dir=None,
+    #gset_test = GuitarSetTabs(base_dir=gset_bsdir,
                               hop_length=hop_length,
                               sample_rate=sample_rate,
+                              num_frames=None,
                               data_proc=data_proc,
                               profile=profile,
                               reset_data=reset_data,
-                              store_data=False,
+                              store_data=True,
                               save_loc=gset_cache)
 
     print('Initializing model...')
 
-    matrix_path = os.path.join('..', 'generated', 'inhibition_matrix_standard.npz')
+    #matrix_path = os.path.join('..', 'generated', 'inhibition_matrix_dadagp_no_aug.npz')
 
     # Initialize a new instance of the model
-    tablature_layer = RecConvLogisticEstimator(profile=profile,
-                                               model_complexity=3,
-                                               matrix_path=matrix_path,
-                                               device=gpu_id)
+    tablature_layer = RecConvClassicEstimator(profile=profile,
+                                              model_complexity=3,
+                                              #matrix_path=matrix_path,
+                                              device=gpu_id)
     tablature_layer.change_device()
     tablature_layer.train()
 
@@ -194,7 +194,7 @@ def train_tablature(sample_rate, hop_length, num_frames, iterations, checkpoints
                             checkpoints=checkpoints,
                             log_dir=model_dir,
                             single_batch=True,
-                            val_set=gset_test,
+                            val_set=gpro_val,
                             estimator=validation_estimator,
                             evaluator=validation_evaluator)
 

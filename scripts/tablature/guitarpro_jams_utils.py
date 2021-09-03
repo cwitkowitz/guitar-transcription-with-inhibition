@@ -100,9 +100,9 @@ def validate_gpro_track(gpro_track, tuning=None):
     # Determine if the track is valid
     valid = not percussive and guitar and expected_strings
 
-    """
+    """"""
     all_notes = []
-    measures = track.measures
+    measures = gpro_track.measures
     for m in measures:
         voices = m.voices
         for v in voices:
@@ -111,7 +111,7 @@ def validate_gpro_track(gpro_track, tuning=None):
                 notes = b.notes
                 all_notes += notes
     valid = valid and (len(all_notes) > 0)
-    """
+    """"""
 
     return valid
 
