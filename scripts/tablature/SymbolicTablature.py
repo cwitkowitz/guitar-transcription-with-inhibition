@@ -34,11 +34,11 @@ class SymbolicTablature(TranscriptionDataset):
           Whether or not to augment the tablature at the note level
         """
 
-        super().__init__(base_dir, splits, hop_length, sample_rate, data_proc, profile,
-                         num_frames, split_notes, reset_data, store_data, save_data, save_loc, seed)
-
         self.max_duration = 60 * max_duration # Convert to seconds
         self.augment_notes = augment_notes
+
+        super().__init__(base_dir, splits, hop_length, sample_rate, data_proc, profile,
+                         num_frames, split_notes, reset_data, store_data, save_data, save_loc, seed)
 
     def __getitem__(self, index):
         """

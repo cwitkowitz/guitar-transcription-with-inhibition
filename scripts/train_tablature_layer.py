@@ -91,25 +91,12 @@ def train_tablature(sample_rate, hop_length, num_frames, iterations, checkpoints
                                            TablatureEvaluator(profile=profile),
                                            SoftmaxAccuracy(key=tools.KEY_TABLATURE)])
 
-    """
-    # Get a list of the GuitarPro splits
-    splits = GuitarProData.available_splits()
-
-    # Initialize the validation splits
-    val_splits = ['a', 'b', 'c']
-    # Remove the validation splits to get the training partition
-    train_splits = splits.copy()
-    for split in val_splits:
-        train_splits.remove(split)
-    """
-
     # Base directories
     #gpro_bsdir = os.path.join('/', 'mnt', 'bigstorage', 'data', 'DadaGP')
     #gset_bsdir = os.path.join('/', 'mnt', 'bigstorage', 'data', 'GuitarSet')
 
     # Keep all cached data/features here
     #gset_cache = os.path.join(gset_bsdir, 'precomputed')
-    gpro_cache = os.path.join('..', 'generated', 'data')
     gset_cache = os.path.join('..', 'generated', 'data')
 
     print('Loading training partition...')

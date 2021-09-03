@@ -101,6 +101,7 @@ def validate_gpro_track(gpro_track, tuning=None):
     valid = not percussive and guitar and expected_strings
 
     """"""
+    # TODO - remove when there is a check for zero notes in outer script
     all_notes = []
     measures = gpro_track.measures
     for m in measures:
