@@ -43,7 +43,7 @@ for k in range(6):
     train_splits.remove(test_hold_out)
 
     # Construct a path for saving the inhibition matrix
-    save_path = os.path.join('..', '..', 'generated', f'inhibition_matrix_guitarset_{test_hold_out}_no_aug.npz')
+    save_path = os.path.join('..', '..', 'generated', 'matrices', f'guitarset_{test_hold_out}_no_aug_r5.npz')
 
     # Create a dataset using all of the GuitarSet tablature data, excluding the holdout fold
     gset_train = GuitarSetTabs(base_dir=None,
@@ -58,4 +58,4 @@ for k in range(6):
                                augment_notes=False)
 
     # Obtain an inhibition matrix from the GuitarSet data
-    InhibitionMatrixTrainer(profile, gset_train, save_path).train(residual_threshold=None)
+    InhibitionMatrixTrainer(profile, gset_train, save_path, root=5).train(residual_threshold=None)

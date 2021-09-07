@@ -142,7 +142,7 @@ class InhibitionMatrixTrainer(object):
     """
     Implements the protocol for generating an inhibition matrix.
     """
-    def __init__(self, profile, tablature_data, save_path, checkpoint_gap=1000, n_residual=100):
+    def __init__(self, profile, tablature_data, save_path, root=5, checkpoint_gap=1000, n_residual=100):
         """
         Initialize the internal state for the inhibition matrix training protocol.
 
@@ -154,6 +154,8 @@ class InhibitionMatrixTrainer(object):
           Dataset for sampling symbolic tablature
         save_path : string
           Path to use when saving inhibition matrix
+        root : float
+          Root to use when relaxing inhibition (higher -> weaker inhibition weights)
         checkpoint_gap : int
           Number of iterations between save checkpoints
         n_residual : int
@@ -163,6 +165,7 @@ class InhibitionMatrixTrainer(object):
         self.profile = profile
         self.tablature_data = tablature_data
         self.save_path = save_path
+        self.root = root
         self.checkpoint_gap = checkpoint_gap
 
         # Determine the number of unique activations
@@ -170,7 +173,7 @@ class InhibitionMatrixTrainer(object):
 
         # Initialize pairwise weights with all zeros
         self.pairwise_weights = np.zeros((self.num_activations, self.num_activations))
-        # Initialize a matrix to hold the number of times a pair occurs at least once
+        # Initialize a matrix to hold the number of times a pair occurs at least once in a track
         self.valid_count = np.zeros(self.pairwise_weights.shape)
 
         # Initialize a counter for the current iteration
@@ -302,8 +305,8 @@ class InhibitionMatrixTrainer(object):
         # Calculate weight as the number of co-occurences over the number of unique observations (IoU)
         iteration_weight = co_occurrences[valid_idcs] / unique_occurrences[valid_idcs]
 
-        # Add the (nth-root boosted) weight (within [0, 1]) to the pairwise weights
-        self.pairwise_weights[valid_idcs] += (iteration_weight ** 0.2) # 5th root
+        # Add the (zth-root boosted) weight (within [0, 1]) to the pairwise weights
+        self.pairwise_weights[valid_idcs] += (iteration_weight ** (1 / self.root))
 
         # Compute the residual between the current and previous matrix
         residual = np.sum(np.abs(self.compute_current_matrix() - previous_matrix))

@@ -12,7 +12,7 @@ from tablature.GuitarProTabs import DadaGP
 import os
 
 # Construct a path for saving the inhibition matrix
-save_path = os.path.join('..', '..', 'generated', 'inhibition_matrix_dadagp_no_aug.npz')
+save_path = os.path.join('..', '..', 'generated', 'matrices', 'dadagp_no_aug_r5.npz')
 
 # Number of samples per second of audio
 sample_rate = 22050
@@ -43,4 +43,4 @@ gpro_train = DadaGP(base_dir=None,
                     augment_notes=False)
 
 # Obtain an inhibition matrix from the GuitarPro data
-InhibitionMatrixTrainer(profile, gpro_train, save_path).train(residual_threshold=None)
+InhibitionMatrixTrainer(profile, gpro_train, save_path, root=5).train(residual_threshold=None)

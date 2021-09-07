@@ -129,7 +129,7 @@ def train_tablature(sample_rate, hop_length, num_frames, iterations, checkpoints
                       splits=['val'],
                       hop_length=hop_length,
                       sample_rate=sample_rate,
-                      num_frames=None,
+                      num_frames=num_frames,
                       data_proc=data_proc,
                       profile=profile,
                       save_data=False,

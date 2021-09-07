@@ -342,7 +342,7 @@ class LogisticTablatureEstimator(TablatureEstimator):
             inhibition_loss = torch.mean(torch.mean(inhibition_loss, axis=0), axis=0)
 
             # Divide by two, since every pair will have a duplicate entry, and average for each pair
-            inhibition_loss = 1000 * torch.mean(inhibition_loss / 2)
+            inhibition_loss = torch.mean(inhibition_loss / 2)
             # Add the inhibition loss to the tracked loss dictionary
             loss[tools.KEY_LOSS_INH] = inhibition_loss
             # Add the inhibition loss to the total loss
