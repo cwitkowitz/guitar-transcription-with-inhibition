@@ -1,6 +1,7 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
+#from amt_tools.models import TabCNN
 from amt_tools.datasets import GuitarSet
 from amt_tools.features import CQT
 
@@ -75,7 +76,7 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
     tools.seed_everything(seed)
 
     # Initialize the default guitar profile
-    profile = tools.GuitarProfile(num_frets=19)
+    profile = tools.GuitarProfile(num_frets=22)
 
     # Processing parameters
     dim_in = 192
@@ -96,7 +97,11 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
                                            TablatureEvaluator(profile=profile),
                                            SoftmaxAccuracy(key=tools.KEY_TABLATURE)])
 
+    # Base directories
+    #gset_bsdir = os.path.join('/', 'mnt', 'bigstorage', 'data', 'GuitarSet')
+
     # Keep all cached data/features here
+    #gset_cache = os.path.join(gset_bsdir, 'precomputed')
     gset_cache = os.path.join('..', 'generated', 'data')
 
     # Get a list of the GuitarSet splits
@@ -122,12 +127,13 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
 
         # Create a dataset corresponding to the training partition
         gset_train = GuitarSet(base_dir=None,
+        #gset_train = GuitarSet(base_dir=gset_bsdir,
                                splits=train_splits,
                                hop_length=hop_length,
                                sample_rate=sample_rate,
+                               num_frames=num_frames,
                                data_proc=data_proc,
                                profile=profile,
-                               num_frames=num_frames,
                                reset_data=reset_data,
                                save_loc=gset_cache)
 
@@ -142,9 +148,11 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
 
         # Create a dataset corresponding to the testing partition
         gset_test = GuitarSet(base_dir=None,
+        #gset_test = GuitarSet(base_dir=gset_bsdir,
                               splits=test_splits,
                               hop_length=hop_length,
                               sample_rate=sample_rate,
+                              num_frames=None,
                               data_proc=data_proc,
                               profile=profile,
                               store_data=False,
@@ -152,12 +160,20 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
 
         print('Initializing model...')
 
+        matrix_path = os.path.join('..', 'generated', 'matrices', f'dadagp_no_aug_r10.npz')
+
         # Initialize a new instance of the model
         model = TabCNNLogistic(dim_in=dim_in,
                                profile=profile,
                                in_channels=data_proc.get_num_channels(),
                                model_complexity=model_complexity,
+                               matrix_path=matrix_path,
                                device=gpu_id)
+        #model = TabCNN(dim_in=dim_in,
+        #                       profile=profile,
+        #                       in_channels=data_proc.get_num_channels(),
+        #                       model_complexity=model_complexity,
+        #                       device=gpu_id)
         model.change_device()
         model.train()
 
