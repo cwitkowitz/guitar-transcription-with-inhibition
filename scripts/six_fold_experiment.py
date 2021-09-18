@@ -58,6 +58,9 @@ def config():
     # This is useful if testing out different parameters
     reset_data = False
 
+    # Flag to use one split for validation
+    validation_split = True
+
     # The random seed for this experiment
     seed = 0
 
@@ -71,12 +74,13 @@ def config():
 
 @ex.automain
 def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoints,
-                       batch_size, learning_rate, gpu_id, reset_data, seed, root_dir):
+                       batch_size, learning_rate, gpu_id, reset_data, validation_split,
+                       seed, root_dir):
     # Seed everything with the same seed
     tools.seed_everything(seed)
 
     # Initialize the default guitar profile
-    profile = tools.GuitarProfile(num_frets=22)
+    profile = tools.GuitarProfile(num_frets=19)
 
     # Processing parameters
     dim_in = 192
@@ -112,16 +116,23 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
 
     # Perform each fold of cross-validation
     for k in range(6):
-        # Determine the name of the splits being removed
+        # Determine the testing split for the fold
         test_hold_out = '0' + str(k)
 
         print('--------------------')
         print(f'Fold {test_hold_out}:')
 
-        # Remove the hold out splits to get the partitions
+        # Remove the testing split
         train_splits = splits.copy()
         train_splits.remove(test_hold_out)
         test_splits = [test_hold_out]
+
+        if validation_split:
+            # Determine the validation split for the fold
+            val_hold_out = '0' + str(5 - k)
+            # Remove the validation split
+            train_splits.remove(val_hold_out)
+            val_splits = [val_hold_out]
 
         print('Loading training partition...')
 
@@ -144,7 +155,7 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
                                   num_workers=0,
                                   drop_last=True)
 
-        print('Loading testing partition...')
+        print(f'Loading testing partition (player {test_hold_out})...')
 
         # Create a dataset corresponding to the testing partition
         gset_test = GuitarSet(base_dir=None,
@@ -157,6 +168,24 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
                               profile=profile,
                               store_data=False,
                               save_loc=gset_cache)
+
+        if validation_split:
+            print(f'Loading validation partition (player {val_hold_out})...')
+
+            # Create a dataset corresponding to the validation partition
+            gset_val = GuitarSet(base_dir=None,
+            #gset_val = GuitarSet(base_dir=gset_bsdir,
+                                 splits=val_splits,
+                                 hop_length=hop_length,
+                                 sample_rate=sample_rate,
+                                 num_frames=None,
+                                 data_proc=data_proc,
+                                 profile=profile,
+                                 store_data=False,
+                                 save_loc=gset_cache)
+        else:
+            # Validate on the test set
+            gset_val = gset_test
 
         print('Initializing model...')
 
@@ -195,7 +224,7 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
                       iterations=iterations,
                       checkpoints=checkpoints,
                       log_dir=model_dir,
-                      val_set=gset_test,
+                      val_set=gset_val,
                       estimator=validation_estimator,
                       evaluator=validation_evaluator)
 
