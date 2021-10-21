@@ -49,7 +49,7 @@ for dir_path, dirs, files in os.walk(base_dir):
     tracked_paths += [dir_path] * len(valid_files)
 
 # Loop through the tracked GuitarPro files
-# TODO - could probably combine the for-loops now, even possibly have a jams/ directory per sub-split
+# TODO - could probably combine the for-loops now, even possibly have a jams/ directory under each sub-split
 for i, gpro_file in enumerate(tracked_files):
     print(f'Processing track \'{gpro_file}\'...')
 

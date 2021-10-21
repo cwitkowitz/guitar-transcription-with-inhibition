@@ -14,18 +14,19 @@ import amt_tools.tools as tools
 import torch
 import os
 
-multipitch_model_path = 'path/to/multipitch/model'
-tablature_model_path = 'path/to/tablature/layer'
+import sys
+sys.path.insert(0, '..')
+
+from tablature.GuitarProTabs import DadaGP
+from tablature.GuitarSetTabs import GuitarSetTabs
+
+model_path = 'path/to/tablature/layer'
 
 gpu_id = 0
 device = torch.device(f'cuda:{gpu_id}' if torch.cuda.is_available() else 'cpu')
 
-model = torch.load(multipitch_model_path, map_location=device)
+model = torch.load(model_path, map_location=device)
 model.change_device(gpu_id)
-
-tablature_layer = torch.load(tablature_model_path)
-tablature_layer.change_device(gpu_id)
-model.set_tablature_layer(tablature_layer)
 
 profile = model.profile
 
@@ -39,7 +40,7 @@ data_proc = CQT(sample_rate=sample_rate,
                 bins_per_octave=24)
 
 # Initialize the estimation pipeline
-validation_estimator = None
+validation_estimator = ComboEstimator([TablatureWrapper(profile)])
 
 # Initialize the evaluation pipeline
 validation_evaluator = ComboEvaluator([MultipitchEvaluator(),
@@ -50,19 +51,45 @@ validation_evaluator = ComboEvaluator([MultipitchEvaluator(),
 features_gt_cache = os.path.join('..', '..', 'generated', 'data')
 
 ##################################################
+# DadaGP                                         #
+##################################################
+
+"""
+# Create a dataset object for GuitarSet
+gpro_val = DadaGP(base_dir=None,
+                  splits=['val'],
+                  hop_length=hop_length,
+                  sample_rate=sample_rate,
+                  data_proc=data_proc,
+                  profile=profile,
+                  save_data=False,
+                  store_data=False,
+                  augment_notes=False)
+
+# Get the average results for GuitarSet
+results = validate(model, gpro_val, evaluator=validation_evaluator, estimator=validation_estimator)
+
+# Print the average results
+print('DadaGP Results')
+print(results)
+
+# Reset the evaluator
+validation_evaluator.reset_results()
+"""
+
+##################################################
 # GuitarSet                                      #
 ##################################################
 
 # Create a dataset object for GuitarSet
-gset_test = GuitarSet(base_dir=None,
-                      splits=['00'],
-                      hop_length=hop_length,
-                      sample_rate=sample_rate,
-                      data_proc=data_proc,
-                      profile=profile,
-                      reset_data=False,
-                      store_data=False,
-                      save_loc=features_gt_cache)
+gset_test = GuitarSetTabs(base_dir=None,
+                          hop_length=hop_length,
+                          sample_rate=sample_rate,
+                          data_proc=data_proc,
+                          profile=profile,
+                          reset_data=False,
+                          store_data=False,
+                          save_loc=features_gt_cache)
 
 # Get the average results for GuitarSet
 results = validate(model, gset_test, evaluator=validation_evaluator, estimator=validation_estimator)

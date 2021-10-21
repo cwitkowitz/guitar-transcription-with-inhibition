@@ -9,9 +9,9 @@ import torch
 import time
 
 # Define path to model, audio, and ground-truth
-model_path = '/home/rockstar/Desktop/guitar-transcription/generated/experiments/baseline.pt'
-audio_path = '/home/rockstar/Desktop/Datasets/GuitarSet/audio_mono-mic/00_BN1-129-Eb_comp_mic.wav'
-gt_path = '/home/rockstar/Desktop/guitar-transcription/generated/data/GuitarSet/ground_truth/00_BN1-129-Eb_comp.npz'
+model_path = '/path/to/model'
+audio_path = '/path/to/audio'
+gt_path = '/path/to/ground-truth'
 
 # Feature extraction parameters
 sample_rate = 22050

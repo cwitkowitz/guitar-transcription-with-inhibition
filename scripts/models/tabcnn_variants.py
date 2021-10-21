@@ -7,6 +7,7 @@ from .tablature_layers import ClassicTablatureEstimator, LogisticTablatureEstima
 
 # Regular imports
 from copy import deepcopy
+import torch
 
 
 class TabCNNLogistic(TabCNN):
@@ -288,8 +289,18 @@ class TabCNNJointCustom(TabCNNMultipitch):
                 # Do not propagate tablature gradient through multipitch estimation
                 multipitch = multipitch.detach()
 
+            # Determine how many frets are missing from the multipitch
+            num_missing_frets = self.tablature_layer.profile.get_range_len() - self.profile.get_range_len()
+
+            # Create the zero padding to add to the multipitch
+            padding = torch.zeros((multipitch.shape[:-1] + tuple([num_missing_frets]))).to(multipitch.device)
+
+            # Pad the multipitch to account for the missing frets
+            multipitch = torch.cat((multipitch, padding), dim=-1)
+
             # Obtain the tablature estimate and add it to the output dictionary
-            output.update(self.tablature_layer(multipitch))
+            #output.update(self.tablature_layer(multipitch))
+            output.update(self.tablature_layer.run_on_batch({tools.KEY_FEATS : multipitch}))
 
         return output
 
@@ -312,12 +323,12 @@ class TabCNNJointCustom(TabCNNMultipitch):
         # Call the parent function to do the multipitch stuff
         batch[tools.KEY_OUTPUT] = super().post_proc(batch)
 
-        if self.tablature_layer is not None:
-            # Perform the post-processing steps of the tablature layer
-            output = self.tablature_layer.post_proc(batch)
-        else:
-            # Extract the raw output
-            output = batch[tools.KEY_OUTPUT]
+        #if self.tablature_layer is not None:
+        #    # Perform the post-processing steps of the tablature layer
+        #    output = self.tablature_layer.post_proc(batch)
+        #else:
+        # Extract the raw output
+        output = batch[tools.KEY_OUTPUT]
 
         return output
 

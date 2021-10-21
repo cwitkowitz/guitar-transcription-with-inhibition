@@ -9,7 +9,7 @@ from amt_tools.evaluate import *
 
 import amt_tools.tools as tools
 
-from models.symbolic_models import RecConvClassicEstimator
+from models.symbolic_models import RecConvLogisticEstimator
 from tablature.GuitarProTabs import DadaGP
 from tablature.GuitarSetTabs import GuitarSetTabs
 
@@ -21,7 +21,7 @@ from sacred import Experiment
 import torch
 import os
 
-EX_NAME = '_'.join([RecConvClassicEstimator.model_name()])
+EX_NAME = '_'.join(['TA', 'Logistic', 'dadagp', '10E0', 'p500'])
 
 ex = Experiment('Separate Tablature Prediction Experiment')
 
@@ -50,7 +50,7 @@ def config():
     learning_rate = 1.0
 
     # The id of the gpu to use, if available
-    gpu_id = 0
+    gpu_id = 1
 
     # Flag to re-acquire ground-truth data and re-calculate-features
     # This is useful if testing out different parameters
@@ -152,12 +152,12 @@ def train_tablature(sample_rate, hop_length, num_frames, iterations, checkpoints
 
     print('Initializing model...')
 
-    #matrix_path = os.path.join('..', 'generated', 'inhibition_matrix_dadagp_no_aug.npz')
+    matrix_path = os.path.join('..', 'generated', 'matrices', 'dadagp_no_aug_p500.npz')
 
     # Initialize a new instance of the model
-    tablature_layer = RecConvClassicEstimator(profile=profile,
+    tablature_layer = RecConvLogisticEstimator(profile=profile,
                                               model_complexity=3,
-                                              #matrix_path=matrix_path,
+                                              matrix_path=matrix_path,
                                               device=gpu_id)
     tablature_layer.change_device()
     tablature_layer.train()

@@ -11,6 +11,8 @@ import librosa
 import jams
 import os
 
+# TODO - clean this file up
+
 QUARTER_LENGTH_TICKS = 960
 STANDARD_TUNING = np.array([64, 59, 55, 50, 45, 40])
 FORBIDDEN_CHARACTERS = ['/', '*', '|', '\"']

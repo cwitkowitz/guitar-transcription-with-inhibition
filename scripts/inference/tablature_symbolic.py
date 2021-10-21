@@ -10,9 +10,9 @@ import torch
 import jams
 import sys
 
-# Define path to model, audio, and ground-truth
-model_path = '/home/rockstar/Desktop/guitar-transcription/generated/experiments/tablature_best.pt'
-jams_path = '/home/rockstar/Desktop/Datasets/GuitarSet/annotation/00_BN1-129-Eb_solo.jams'
+# Define path to model and ground-truth
+model_path = '/path/to/model'
+jams_path = '/path/to/jams'
 #jams_path = '/home/rockstar/Desktop/Datasets/GuitarProData/jams4/Led Zeppelin - Down By The Seaside -- Track 1.jams'
 
 # Feature extraction parameters

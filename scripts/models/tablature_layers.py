@@ -361,7 +361,7 @@ class LogisticTablatureEstimator(TablatureEstimator):
         B, T, A = tablature_est.size()
 
         #correlation = (1 - self.weights).unsqueeze(0).unsqueeze(0).to(tablature_est.device)
-        correlation = torch.tile((1 - self.weights), (B, T, 1, 1)).to(tablature_est.device)
+        correlation = torch.tile((1 - self.inhibition_matrix), (B, T, 1, 1)).to(tablature_est.device)
         for i in range(num_strings):
             likelihood = torch.mul(tablature_est.unsqueeze(-2), correlation)
             #likelihood = likelihood.view(B, T, A, num_strings, num_classes)

@@ -7,7 +7,7 @@ import amt_tools.tools as tools
 import torch
 
 # Define path to model, audio, and ground-truth
-model_path = '/home/rockstar/Desktop/guitar-transcription/generated/experiments/baseline.pt'
+model_path = '/path/to/model'
 
 # Feature extraction parameters
 sample_rate = 22050
