@@ -12,7 +12,7 @@ from tablature.GuitarProTabs import DadaGP
 import os
 
 # Select z for taking the zth-root
-z = 1000
+z = 1
 
 # Construct a path for saving the inhibition matrix
 save_path = os.path.join('..', '..', 'generated', 'matrices', f'dadagp_no_aug_r{z}.npz')
@@ -46,4 +46,4 @@ gpro_train = DadaGP(base_dir=None,
                     augment_notes=False)
 
 # Obtain an inhibition matrix from the GuitarPro data
-InhibitionMatrixTrainer(profile, gpro_train, save_path, root=z).train(residual_threshold=None)
+InhibitionMatrixTrainer(profile, root=z, save_path=save_path).train(gpro_train, residual_threshold=None)

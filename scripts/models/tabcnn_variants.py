@@ -15,7 +15,8 @@ class TabCNNLogistic(TabCNN):
     Implements TabCNN with a logistic output layer instead of the classic (softmax) output layer.
     """
 
-    def __init__(self, dim_in, profile, in_channels, model_complexity=1, matrix_path=None, device='cpu'):
+    def __init__(self, dim_in, profile, in_channels, model_complexity=1,
+                 matrix_path=None, silence_activations=False, device='cpu'):
         """
         Initialize the model and replace the final layer.
 
@@ -24,12 +25,14 @@ class TabCNNLogistic(TabCNN):
         See TabCNN class for others...
         matrix_path : str or None (optional)
           Path to inhibition matrix
+        silence_activations : bool
+          Whether to explicitly model silence
         """
 
         super().__init__(dim_in, profile, in_channels, model_complexity, device)
 
         # Replace the tablature layer with a logistic tablature estimator
-        self.dense[-1] = LogisticTablatureEstimator(128, profile, matrix_path, device)
+        self.dense[-1] = LogisticTablatureEstimator(128, profile, matrix_path, silence_activations, device)
 
     def pre_proc(self, batch):
         """

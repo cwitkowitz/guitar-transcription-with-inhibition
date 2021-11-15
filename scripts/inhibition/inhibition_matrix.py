@@ -69,7 +69,7 @@ def trim_inhibition_matrix(inhibition_matrix, num_strings, num_pitches):
     return inhibition_matrix
 
 
-def plot_inhibition_matrix(inhibition_matrix, include_axes=True, labels=None, fig=None):
+def plot_inhibition_matrix(inhibition_matrix, v_bounds=None, include_axes=True, labels=None, fig=None):
     """
     Static function for plotting an inhibition matrix heatmap.
 
@@ -78,6 +78,8 @@ def plot_inhibition_matrix(inhibition_matrix, include_axes=True, labels=None, fi
     inhibition_matrix : ndarray (N x N)
       Matrix of inhibitory weights for string/fret pairs
       N - number of unique string/fret activations
+    v_bounds : list, ndarray, or None (Optional)
+      Boundaries for plotting the heatmap as [vmin, vmax]
     include_axes : bool
       Whether to include the axis in the plot
     labels : list of string or None (Optional)
@@ -95,6 +97,9 @@ def plot_inhibition_matrix(inhibition_matrix, include_axes=True, labels=None, fi
         # Initialize a new figure if one was not given
         fig = tools.initialize_figure(interactive=False)
 
+    if v_bounds is None:
+        v_bounds = [None, None]
+
     # Obtain a handle for the figure's current axis
     ax = fig.gca()
 
@@ -110,7 +115,7 @@ def plot_inhibition_matrix(inhibition_matrix, include_axes=True, labels=None, fi
         ax.images[0].set_data(likelihood)
     else:
         # Plot the inhibition matrix as a heatmap
-        ax.imshow(likelihood, extent=[0, num_activations, num_activations, 0])
+        ax.imshow(likelihood, extent=[0, num_activations, num_activations, 0], vmin=v_bounds[0], vmax=v_bounds[1])
 
     # Add a title to the heatmap
     ax.set_title('Inhibition Matrix')
@@ -142,7 +147,7 @@ class InhibitionMatrixTrainer(object):
     """
     Implements the protocol for generating an inhibition matrix.
     """
-    def __init__(self, profile, tablature_data, save_path, root=5, checkpoint_gap=1000, n_residual=100):
+    def __init__(self, profile, silent_string=False, root=5, checkpoint_gap=1000, n_residual=100, save_path=None):
         """
         Initialize the internal state for the inhibition matrix training protocol.
 
@@ -150,26 +155,27 @@ class InhibitionMatrixTrainer(object):
         ----------
         profile : TablatureProfile (tools/instrument.py)
           Instructions for organizing tablature into logistic activations
-        tablature_data : SymbolicTablature dataset
-          Dataset for sampling symbolic tablature
-        save_path : string
-          Path to use when saving inhibition matrix
+        silent_string : bool
+          Whether the silent string is explicitly modeled as an activation
         root : float
           Root to use when relaxing inhibition (higher -> weaker inhibition weights)
         checkpoint_gap : int
           Number of iterations between save checkpoints
         n_residual : int
           Number of iterations over which to average residual when checking stop condition
+        save_path : string or None (optional)
+          Path to use when saving inhibition matrix
         """
 
         self.profile = profile
-        self.tablature_data = tablature_data
-        self.save_path = save_path
+        self.silent_string = silent_string
         self.root = root
         self.checkpoint_gap = checkpoint_gap
+        self.save_path = save_path
 
         # Determine the number of unique activations
-        self.num_activations = profile.get_num_dofs() * profile.num_pitches
+        self.num_activations = profile.get_num_dofs() * profile.num_pitches + \
+                                   int(self.silent_string) * profile.get_num_dofs()
 
         # Initialize pairwise weights with all zeros
         self.pairwise_weights = np.zeros((self.num_activations, self.num_activations))
@@ -181,18 +187,20 @@ class InhibitionMatrixTrainer(object):
         # Initialize a residual buffer to use for feedback and stopping
         self.residual = np.array([inf] * n_residual)
 
-    def train(self, residual_threshold=None):
+    def train(self, tablature_data, residual_threshold=None):
         """
         Perform training steps for the inhibition matrix.
 
         Parameters
         ----------
+        tablature_data : SymbolicTablature dataset
+          Dataset for sampling symbolic tablature
         residual_threshold : float or None (optional)
           Residual threshold for stopping training
         """
 
         # Determine the total number of tracks in the dataset
-        num_tracks = len(self.tablature_data)
+        num_tracks = len(tablature_data)
 
         # Loop until a stop condition is met
         while True:
@@ -212,10 +220,13 @@ class InhibitionMatrixTrainer(object):
                 sample_idx = self.current_iteration
             else:
                 # Sample tracks randomly
-                sample_idx = self.tablature_data.rng.randint(0, num_tracks)
+                sample_idx = tablature_data.rng.randint(0, num_tracks)
 
-            # Obtain activations for the sampled track
-            logistic_activations = self.get_logistic_activations(sample_idx)
+            # Extract the sampled tablature from the dataset
+            sampled_tabs = tablature_data[sample_idx][tools.KEY_TABLATURE]
+
+            # Convert the tablature data to a stacked multi pitch array
+            logistic_activations = tools.tablature_to_logistic(sampled_tabs, self.profile, self.silent_string)
 
             # Update the matrix with the sampled activations
             self.step(logistic_activations)
@@ -224,7 +235,7 @@ class InhibitionMatrixTrainer(object):
             print(f'\rIteration : {self.current_iteration + 1} | Avg. Residual : {np.mean(self.residual)}', end='')
 
             # Determine if the current iteration is a checkpoint
-            if (self.current_iteration + 1) % self.checkpoint_gap == 0:
+            if (self.current_iteration + 1) % self.checkpoint_gap == 0 and self.save_path is not None:
                 # Save the inhibition matrix
                 self.save_current_matrix()
 
@@ -234,37 +245,9 @@ class InhibitionMatrixTrainer(object):
         # Print a newline character
         print()
 
-        # Save the inhibition matrix one final time
-        self.save_current_matrix()
-
-    def get_logistic_activations(self, sample_idx):
-        """
-        Obtain frame-level activations for unique string/fret combinations.
-
-        Parameters
-        ----------
-        sample_idx : int
-          Sampled track index
-
-        Returns
-        ----------
-        logistic_activations : ndarray (T x N)
-          Array of tablature activations (e.g. string/fret combinations)
-          T - number of frames
-          N - number of unique string/fret activations
-        """
-
-        # Extract the sampled tablature from the dataset
-        sampled_tabs = self.tablature_data[sample_idx][tools.KEY_TABLATURE]
-
-        # Convert the tablature data to a stacked multi pitch array
-        stacked_multi_pitch = tools.tablature_to_stacked_multi_pitch(sampled_tabs, self.profile)
-        # Remove silent frames from the stacked multi pitch array
-        stacked_multi_pitch = stacked_multi_pitch[..., np.sum(np.sum(stacked_multi_pitch, axis=-2), axis=-2) > 0]
-        # Convert the stacked multi pitch array to logistic (unique string/fret) activations
-        logistic_activations = np.transpose(tools.stacked_multi_pitch_to_logistic(stacked_multi_pitch, self.profile))
-
-        return logistic_activations
+        if self.save_path is not None:
+            # Save the inhibition matrix one final time
+            self.save_current_matrix()
 
     def step(self, logistic_activations):
         """
@@ -272,7 +255,7 @@ class InhibitionMatrixTrainer(object):
 
         Parameters
         ----------
-        logistic_activations : ndarray (T x N)
+        logistic_activations : ndarray (N x T)
           Array of tablature activations (e.g. string/fret combinations)
           T - number of frames
           N - number of unique string/fret activations
@@ -280,6 +263,19 @@ class InhibitionMatrixTrainer(object):
 
         # Compute the matrix before the update
         previous_matrix = self.compute_current_matrix()
+
+        # Transpose the logistic activations
+        logistic_activations = np.transpose(logistic_activations)
+
+        #if self.silent_string:
+        #    # Determine which indices in the logistic activations correspond to string silence
+        #    no_string_idcs = (self.profile.num_pitches + 1) * np.arange(self.profile.get_num_dofs())
+        #    # Determine how many strings are inactive at each frame
+        #    num_silent_strings = np.sum(logistic_activations[..., no_string_idcs], axis=-1)
+        #    # Obtain index pairs for silent string activations where more than N=2 strings are silent
+        #    idx_pairs = np.meshgrid(np.where(num_silent_strings > 2)[0], no_string_idcs)
+        #    # Ignore silent string activations unless N or more strings are active
+        #    logistic_activations[idx_pairs[0].flatten(), idx_pairs[1].flatten()] = 0
 
         # Count the number of frames each string/fret occurs in the tablature data
         single_occurrences = np.expand_dims(np.sum(logistic_activations, axis=0), axis=0)

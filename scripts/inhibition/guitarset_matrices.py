@@ -11,6 +11,9 @@ from tablature.GuitarSetTabs import GuitarSetTabs
 # Regular imports
 import os
 
+# Select z for taking the zth-root
+z = 1
+
 # Number of samples per second of audio
 sample_rate = 22050
 # Number of samples between frames
@@ -34,6 +37,7 @@ splits = GuitarSetTabs.available_splits()
 for k in range(6):
     # Determine the name of the splits being removed
     test_hold_out = '0' + str(k)
+    val_hold_out = '0' + str(5 - k)
 
     print('--------------------')
     print(f'Fold {test_hold_out}:')
@@ -41,9 +45,10 @@ for k in range(6):
     # Remove the hold out splits to get the partitions
     train_splits = splits.copy()
     train_splits.remove(test_hold_out)
+    train_splits.remove(val_hold_out)
 
     # Construct a path for saving the inhibition matrix
-    save_path = os.path.join('..', '..', 'generated', 'matrices', f'guitarset_{test_hold_out}_no_aug_r5.npz')
+    save_path = os.path.join('..', '..', 'generated', 'matrices', f'guitarset_{test_hold_out}_no_aug_r{z}.npz')
 
     # Create a dataset using all of the GuitarSet tablature data, excluding the holdout fold
     gset_train = GuitarSetTabs(base_dir=None,
@@ -58,4 +63,4 @@ for k in range(6):
                                augment_notes=False)
 
     # Obtain an inhibition matrix from the GuitarSet data
-    InhibitionMatrixTrainer(profile, gset_train, save_path, root=5).train(residual_threshold=None)
+    InhibitionMatrixTrainer(profile, root=z, save_path=save_path).train(gset_train, residual_threshold=None)

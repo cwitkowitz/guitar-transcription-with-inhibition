@@ -217,7 +217,7 @@ class LogisticTablatureEstimator(TablatureEstimator):
     """
     Multi-unit (string/fret) logistic regression tablature layer with pairwise inhibition.
     """
-    def __init__(self, dim_in, profile, matrix_path=None, device='cpu'):
+    def __init__(self, dim_in, profile, matrix_path=None, silence_activations=False, device='cpu'):
         """
         Initialize a LogisticBank tablature layer and the inhibition matrix.
 
@@ -226,6 +226,8 @@ class LogisticTablatureEstimator(TablatureEstimator):
         See TranscriptionModel class for others...
         matrix_path : str or None (optional)
           Path to inhibition matrix
+        silence_activations : bool
+          Whether to explicitly model silence
         """
 
         super().__init__(dim_in, profile, device)
@@ -237,18 +239,18 @@ class LogisticTablatureEstimator(TablatureEstimator):
         # Calculate output dimensionality
         dim_out = num_strings * num_pitches
 
+        self.silence_activations = silence_activations
+
+        if self.silence_activations:
+            # Account for no-string activations
+            dim_out += num_strings
+
         # Set the tablature layer to a Logistic bank
         self.tablature_layer = LogisticBank(dim_in, dim_out)
 
-        # Default the inhibition matrix if it does not exist (inhibit string groups)
         if matrix_path is None:
-            # Create a identity matrix with size equal to number of strings
-            inhibition_matrix = torch.eye(num_strings)
-            # Repeat the matrix along both dimensions for each pitch
-            inhibition_matrix = torch.repeat_interleave(inhibition_matrix, num_pitches, dim=0)
-            inhibition_matrix = torch.repeat_interleave(inhibition_matrix, num_pitches, dim=1)
-            # Subtract out self-connections
-            inhibition_matrix = inhibition_matrix - torch.eye(dim_out)
+            # Default the inhibition matrix if it does not exist (inhibit string groups)
+            inhibition_matrix = self.initialize_default_matrix(self.profile, self.silence_activations)
         else:
             # Load the inhibition matrix at the given path
             inhibition_matrix = load_inhibition_matrix(matrix_path)
@@ -257,6 +259,47 @@ class LogisticTablatureEstimator(TablatureEstimator):
 
         # Initialize the inhibition matrix and add it to the specified device
         self.inhibition_matrix = inhibition_matrix.to(self.device)
+
+    @staticmethod
+    def initialize_default_matrix(profile, silence_activations):
+        """
+        Calculate the inhibition loss for frame-level logistic
+        tablature predictions, given a pre-existing inhibition matrix.
+
+        Parameters
+        ----------
+        profile : TablatureProfile (tools/instrument.py)
+          Instructions for organizing tablature into logistic activations
+        silence_activations : bool
+          Whether the silent string is explicitly modeled as an activation
+
+        Returns
+        ----------
+        inhibition_matrix : ndarray (N x N)
+          Matrix of inhibitory weights for string/fret pairs
+          N - number of unique string/fret activations
+        """
+
+        # Extract tablature parameters
+        num_strings = profile.get_num_dofs()
+        num_pitches = profile.num_pitches
+
+        # Calculate output dimensionality
+        dim_out = num_strings * num_pitches
+
+        if silence_activations:
+            # Account for no-string activations
+            dim_out += num_strings
+
+        # Create a identity matrix with size equal to number of strings
+        inhibition_matrix = torch.eye(num_strings)
+        # Repeat the matrix along both dimensions for each pitch
+        inhibition_matrix = torch.repeat_interleave(inhibition_matrix, num_pitches + int(silence_activations), dim=0)
+        inhibition_matrix = torch.repeat_interleave(inhibition_matrix, num_pitches + int(silence_activations), dim=1)
+        # Subtract out self-connections
+        inhibition_matrix = inhibition_matrix - torch.eye(dim_out)
+
+        return inhibition_matrix
 
     def pre_proc(self, batch):
         """
@@ -280,10 +323,8 @@ class LogisticTablatureEstimator(TablatureEstimator):
         if tools.query_dict(batch, tools.KEY_TABLATURE):
             # Extract the tablature from the ground-truth
             tablature = batch[tools.KEY_TABLATURE]
-            # Convert to a stacked multi pitch array
-            stacked_multi_pitch = tools.tablature_to_stacked_multi_pitch(tablature, self.profile)
-            # Convert to logistic activations
-            logistic = tools.stacked_multi_pitch_to_logistic(stacked_multi_pitch, self.profile, silence=False)
+            # Convert the tablature to logistic activations
+            logistic = tools.tablature_to_logistic(tablature, self.profile, silence=self.silence_activations)
             # Add back to the ground-truth
             batch[tools.KEY_TABLATURE] = logistic
 
@@ -291,6 +332,47 @@ class LogisticTablatureEstimator(TablatureEstimator):
         batch = tools.dict_to_device(batch, self.device)
 
         return batch
+
+    @staticmethod
+    def calculate_inhibition_loss(logistic_tablature, inhibition_matrix):
+        """
+        Calculate the inhibition loss for frame-level logistic
+        tablature predictions, given a pre-existing inhibition matrix.
+
+        Parameters
+        ----------
+        logistic_tablature : tensor (T x N)
+          Tensor of tablature activations (e.g. string/fret combinations)
+          T - number of frames
+          N - number of unique string/fret activations
+        inhibition_matrix : ndarray (N x N)
+          Matrix of inhibitory weights for string/fret pairs
+          N - number of unique string/fret activations
+
+        Returns
+        ----------
+        inhibition_loss : float
+          Measure of the degree to which inhibitory pairs are co-activated
+        """
+
+        # Determine the number of unique activations
+        num_activations = inhibition_matrix.shape[-1]
+
+        # Compute the outer product of the string/fret activations
+        outer = torch.bmm(logistic_tablature.view(-1, num_activations, 1),
+                          logistic_tablature.view(-1, 1, num_activations))
+        # Un-collapse the batch dimension
+        outer = outer.view(tuple(logistic_tablature.shape[:-1]) + tuple([num_activations] * 2))
+        # Apply the inhibition matrix weights to the outer product
+        inhibition_loss = inhibition_matrix * outer
+
+        # Average the inhibition loss over the batch and frame dimension
+        inhibition_loss = torch.mean(torch.mean(inhibition_loss, axis=0), axis=0)
+
+        # Divide by two, since every pair will have a duplicate entry, and average for each pair
+        inhibition_loss = torch.mean(inhibition_loss / 2)
+
+        return inhibition_loss
 
     def post_proc(self, batch):
         """
@@ -327,25 +409,13 @@ class LogisticTablatureEstimator(TablatureEstimator):
 
         # Determine if loss is being tracked
         if total_loss:
-            # Determine the number of unique activations
-            num_activations = self.inhibition_matrix.shape[-1]
-
-            # Compute the outer product of the string/fret activations
-            outer = torch.bmm(tablature_est.view(-1, num_activations, 1),
-                              tablature_est.view(-1, 1, num_activations))
-            # Un-collapse the batch dimension
-            outer = outer.view(tuple(tablature_est.shape[:-1]) + tuple([num_activations] * 2))
-            # Apply the inhibition matrix weights to the outer product
-            inhibition_loss = self.inhibition_matrix * outer
-
-            # Average the inhibition loss over the batch and frame dimension
-            inhibition_loss = torch.mean(torch.mean(inhibition_loss, axis=0), axis=0)
-
-            # Divide by two, since every pair will have a duplicate entry, and average for each pair
-            inhibition_loss = torch.mean(inhibition_loss / 2)
+            # Compute the inhibition loss for the estimated tablature
+            inhibition_loss = self.calculate_inhibition_loss(tablature_est, self.inhibition_matrix)
             # Add the inhibition loss to the tracked loss dictionary
             loss[tools.KEY_LOSS_INH] = inhibition_loss
             # Add the inhibition loss to the total loss
+            # TODO - the following line can be used for annealing
+            # total_loss = (total_loss * (50000 - self.iter) / 50000) + (inhibition_loss * (self.iter / 50000))
             total_loss += inhibition_loss
 
         # Determine if loss is being tracked
@@ -355,9 +425,10 @@ class LogisticTablatureEstimator(TablatureEstimator):
             output[tools.KEY_LOSS] = loss
 
         """
+        # TODO - verify it still works with silence activations
         # 6th-order greedy choice algorithm
         num_strings = self.profile.get_num_dofs()
-        num_classes = self.profile.num_pitches
+        num_classes = self.profile.num_pitches + int(self.silence_activations)
         B, T, A = tablature_est.size()
 
         #correlation = (1 - self.weights).unsqueeze(0).unsqueeze(0).to(tablature_est.device)
@@ -391,7 +462,7 @@ class LogisticTablatureEstimator(TablatureEstimator):
         tablature_est = tablature_est.transpose(-2, -1)
 
         # Take the argmax per string for the final predictions
-        tablature_est = tools.logistic_to_tablature(tablature_est, self.profile, False, silence_thr=0.25)
+        tablature_est = tools.logistic_to_tablature(tablature_est, self.profile, self.silence_activations, silence_thr=0.25)
         """"""
 
         # Finalize tablature estimation
