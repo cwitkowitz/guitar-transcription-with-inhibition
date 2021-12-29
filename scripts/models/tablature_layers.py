@@ -255,7 +255,7 @@ class LogisticTablatureEstimator(TablatureEstimator):
             # Load the inhibition matrix at the given path
             inhibition_matrix = load_inhibition_matrix(matrix_path)
             # Trim the inhibition matrix to match the chosen profile
-            inhibition_matrix = torch.Tensor(trim_inhibition_matrix(inhibition_matrix, num_strings, num_pitches))
+            inhibition_matrix = torch.Tensor(trim_inhibition_matrix(inhibition_matrix, num_strings, num_pitches, self.silence_activations))
 
         # Initialize the inhibition matrix and add it to the specified device
         self.inhibition_matrix = inhibition_matrix.to(self.device)
@@ -369,8 +369,8 @@ class LogisticTablatureEstimator(TablatureEstimator):
         # Average the inhibition loss over the batch and frame dimension
         inhibition_loss = torch.mean(torch.mean(inhibition_loss, axis=0), axis=0)
 
-        # Divide by two, since every pair will have a duplicate entry, and average for each pair
-        inhibition_loss = torch.mean(inhibition_loss / 2)
+        # Divide by two, since every pair will have a duplicate entry, and sum across pairs
+        inhibition_loss = torch.sum(inhibition_loss / 2)
 
         return inhibition_loss
 

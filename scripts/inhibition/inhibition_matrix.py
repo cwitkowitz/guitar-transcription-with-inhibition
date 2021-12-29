@@ -33,7 +33,7 @@ def load_inhibition_matrix(save_path):
     return inhibition_matrix
 
 
-def trim_inhibition_matrix(inhibition_matrix, num_strings, num_pitches):
+def trim_inhibition_matrix(inhibition_matrix, num_strings, num_pitches, silent_string=False):
     """
     Helper function to trim away frets from the the inhibition matrix.
 
@@ -46,6 +46,8 @@ def trim_inhibition_matrix(inhibition_matrix, num_strings, num_pitches):
       Number of strings to expect in the inhibition matrix
     num_pitches : int
       Number of pitches per string to expect in the inhibition matrix
+    silent_string : bool
+      Whether the silent string is explicitly modeled as an activation
 
     Returns
     ----------
@@ -54,15 +56,18 @@ def trim_inhibition_matrix(inhibition_matrix, num_strings, num_pitches):
       M - number of unique string/fret activations (trimmed) (num_strings x num_pitches)
     """
 
-    # Determine how many pitches were originally included in the matrix
-    num_pitches_ = inhibition_matrix.shape[-1] // num_strings
+    # Determine how many classes were originally included in the matrix
+    num_classes_ = inhibition_matrix.shape[-1] // num_strings
     # Temporarily re-shape the matrix to be 4D
-    inhibition_matrix = np.reshape(inhibition_matrix, (num_strings, num_pitches_,
-                                                       num_strings, num_pitches_))
+    inhibition_matrix = np.reshape(inhibition_matrix, (num_strings, num_classes_,
+                                                       num_strings, num_classes_))
+
+    # Determine how many classes are to be in the new matrix
+    num_classes = num_pitches + int(silent_string)
     # Throw away any extraneous frets
-    inhibition_matrix = inhibition_matrix[:, :num_pitches, :, :num_pitches]
+    inhibition_matrix = inhibition_matrix[:, :num_classes, :, :num_classes]
     # Calculate output dimensionality
-    num_activations = num_strings * num_pitches
+    num_activations = num_strings * num_classes
     # View the matrix as a square (2D) again
     inhibition_matrix = np.reshape(inhibition_matrix, (num_activations, num_activations))
 

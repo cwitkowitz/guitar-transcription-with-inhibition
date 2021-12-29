@@ -1,5 +1,5 @@
 # My imports
-from amt_tools.models import TabCNN, LogisticBank
+from amt_tools.models import TabCNN, LanguageModel, LogisticBank
 
 import amt_tools.tools as tools
 
@@ -10,7 +10,31 @@ from copy import deepcopy
 import torch
 
 
-class TabCNNLogistic(TabCNN):
+class TabCNNRecurrent(TabCNN):
+    """
+    Implements TabCNN with a recurrent layer inserted before output layer.
+    """
+
+    def __init__(self, dim_in, profile, in_channels, model_complexity=1, device='cpu'):
+        """
+        Initialize the model and insert the recurrent layer.
+
+        Parameters
+        ----------
+        See TabCNN class...
+        """
+
+        super().__init__(dim_in, profile, in_channels, model_complexity, device)
+
+        # Insert the recurrent layer before the output layer
+        self.dense = torch.nn.Sequential(
+            self.dense[:-1],
+            LanguageModel(dim_in=128, dim_out=128, bidirectional=False),
+            self.dense[-1]
+        )
+
+
+class TabCNNLogistic(TabCNNRecurrent):
     """
     Implements TabCNN with a logistic output layer instead of the classic (softmax) output layer.
     """
