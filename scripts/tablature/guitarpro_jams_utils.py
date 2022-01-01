@@ -11,14 +11,18 @@ import librosa
 import jams
 import os
 
+"""
+See https://github.com/Perlence/PyGuitarPro/tree/master/examples
+Getting TuxGuitar to play sound: https://ubuntuforums.org/showthread.php?t=1871443
+"""
+
 # TODO - clean this file up
 
 QUARTER_LENGTH_TICKS = 960
 STANDARD_TUNING = np.array([64, 59, 55, 50, 45, 40])
 FORBIDDEN_CHARACTERS = ['/', '*', '|', '\"']
 
-class Note:
-
+class Note(object):
     def __init__(self,fret,string,time,duration,):
         self.fret = fret
         self.string = string
@@ -29,8 +33,8 @@ class Note:
     def add_duration(self, duration):
         self.duration += duration
 
-class NoteTracker:
 
+class NoteTracker(object):
     def __init__(self,tempo):
         self.tempo = tempo
         self.beat_len_ticks = None
@@ -141,7 +145,7 @@ def get_all_notes_from_track(track, tempo):
 
     measures = track.measures
     for m in measures:
-        time_signature = (m.timeSignature.numerator,m.timeSignature.denominator.value)
+        time_signature = (m.timeSignature.numerator, m.timeSignature.denominator.value)
         beat_len_ticks = 960 / (time_signature[1] / 4)
         note_tracker.set_beat_len_ticks(beat_len_ticks)
 

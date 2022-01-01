@@ -14,6 +14,8 @@ import os
 VALID_GP_EXTS = ['.gp3', '.gp4', '.gp5']
 INVALID_EXTS = ['.pygp', '.gp2tokens2gp']
 
+remove_duplicates = True
+
 # Set the seed for random number generation
 random.seed(0)
 
@@ -35,12 +37,42 @@ for dir_path, dirs, files in os.walk(base_dir):
     if not len(files):
         continue
 
-    # Obtain a list of valid GuitarPro files with the current directory
-    valid_files = [f for f in files
-                   if os.path.splitext(f)[-1] in VALID_GP_EXTS
-                   and INVALID_EXTS[0] not in f
-                   and INVALID_EXTS[1] not in f
-                   and f not in tracked_files]
+    # Obtain a list of valid GuitarPro files within the current directory
+    valid_files = sorted([f for f in files
+                          if os.path.splitext(f)[-1] in VALID_GP_EXTS
+                          and INVALID_EXTS[0] not in f
+                          and INVALID_EXTS[1] not in f
+                          and not (f in tracked_files and remove_duplicates)])
+
+    # Remove duplicates within the directory
+    if remove_duplicates:
+        # Obtain a list of copied files
+        copied_files = [f for f in valid_files if ' copy' in f]
+
+        # Loop through copies in the directory
+        for f in copied_files:
+            # Determine the name of the original file
+            f_name, ext = os.path.splitext(f)[0][:-5], os.path.splitext(f)[-1]
+            # Construct paths to the copy and original
+            copy_path = os.path.join(dir_path, f)
+            orig_path = os.path.join(dir_path, f_name + ext)
+
+            # Remove copies if they have the same file size
+            # TODO - should we make this specification?
+            #if os.path.getsize(copy_path) == os.path.getsize(orig_path):
+            valid_files.remove(f)
+
+        # Create a copy of the valid files to iterate through
+        valid_files_copy = valid_files.copy()
+
+        # Loop through the current valid files list
+        for i in range(0, len(valid_files) - 1):
+            # Obtain the current and next valid file
+            curr_file, next_file = valid_files_copy[i], valid_files_copy[i + 1]
+            # Check if the two files share the same name
+            if os.path.splitext(curr_file)[0] == os.path.splitext(next_file)[0]:
+                # Remove the current file (should be earlier version)
+                valid_files.remove(curr_file)
 
     # Add valid files to tracked list
     tracked_files += valid_files
@@ -49,7 +81,6 @@ for dir_path, dirs, files in os.walk(base_dir):
     tracked_paths += [dir_path] * len(valid_files)
 
 # Loop through the tracked GuitarPro files
-# TODO - could probably combine the for-loops now, even possibly have a jams/ directory under each sub-split
 for i, gpro_file in enumerate(tracked_files):
     print(f'Processing track \'{gpro_file}\'...')
 

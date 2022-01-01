@@ -12,7 +12,7 @@ from amt_tools.evaluate import *
 import amt_tools.tools as tools
 
 from inhibition.inhibition_matrix import InhibitionMatrixTrainer, plot_inhibition_matrix
-from models.tabcnn_variants import TabCNN, TabCNNLogistic
+from models.tabcnn_variants import TabCNN, TabCNNLogistic, TabCNNRecurrent
 from statistics import compute_balanced_class_weighting
 from visualize import plot_logistic_activations
 
@@ -26,7 +26,7 @@ import matplotlib.pyplot as plt
 import torch
 import os
 
-EX_NAME = '_'.join(['GT', 'Logistic'])
+EX_NAME = '_'.join(['GT', 'Logistic', 'strings', 'params3', 'rec', 'long'])
 
 ex = Experiment('TabCNN w/ Tablature Estimation on GuitarSet w/ 6-fold Cross Validation')
 
@@ -40,22 +40,22 @@ def config():
     hop_length = 512
 
     # Number of consecutive frames within each example fed to the model
-    num_frames = 25
+    num_frames = 125
 
     # Number of training iterations to conduct
-    iterations = 500000
+    iterations = 200000
 
     # How many equally spaced save/validation checkpoints - 0 to disable
-    checkpoints = 500
+    checkpoints = 400
 
     # Number of samples to gather for a batch
-    batch_size = 240
+    batch_size = 50
 
     # The initial learning rate
-    learning_rate = 3E-4
+    learning_rate = 1.0
 
     # The id of the gpu to use, if available
-    gpu_id = 0
+    gpu_id = 1
 
     # Flag to re-acquire ground-truth data and re-calculate-features
     # This is useful if testing out different parameters
@@ -68,8 +68,9 @@ def config():
     seed = 0
 
     # Create the root directory for the experiment to hold train/transcribe/evaluate materials
-    root_dir = os.path.join('..', 'generated', 'experiments', EX_NAME)
+    #root_dir = os.path.join('..', 'generated', 'experiments', EX_NAME)
     #root_dir = os.path.join('/', 'home', 'rockstar', 'Desktop', 'guitar-transcription-experiments-final', EX_NAME)
+    root_dir = os.path.join('/', 'storage', 'frank', EX_NAME)
     os.makedirs(root_dir, exist_ok=True)
 
     # Add a file storage observer for the log directory
@@ -104,10 +105,12 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
 
     # Base directories
     #gset_bsdir = os.path.join('/', 'mnt', 'bigstorage', 'data', 'GuitarSet')
+    gset_bsdir = os.path.join('/', 'storage', 'frank', 'GuitarSet')
 
     # Keep all cached data/features here
     #gset_cache = os.path.join(gset_bsdir, 'precomputed')
-    gset_cache = os.path.join('..', 'generated', 'data')
+    #gset_cache = os.path.join('..', 'generated', 'data')
+    gset_cache = os.path.join('/', 'storageNVME', 'frank')
 
     # Get a list of the GuitarSet splits
     splits = GuitarSet.available_splits()
@@ -141,8 +144,8 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
         print('Loading training partition...')
 
         # Create a dataset corresponding to the training partition
-        gset_train = GuitarSet(base_dir=None,
-        #gset_train = GuitarSet(base_dir=gset_bsdir,
+        #gset_train = GuitarSet(base_dir=None,
+        gset_train = GuitarSet(base_dir=gset_bsdir,
                                splits=train_splits,
                                hop_length=hop_length,
                                sample_rate=sample_rate,
@@ -162,8 +165,8 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
         print(f'Loading testing partition (player {test_hold_out})...')
 
         # Create a dataset corresponding to the testing partition
-        gset_test = GuitarSet(base_dir=None,
-        #gset_test = GuitarSet(base_dir=gset_bsdir,
+        #gset_test = GuitarSet(base_dir=None,
+        gset_test = GuitarSet(base_dir=gset_bsdir,
                               splits=test_splits,
                               hop_length=hop_length,
                               sample_rate=sample_rate,
@@ -177,8 +180,8 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
             print(f'Loading validation partition (player {val_hold_out})...')
 
             # Create a dataset corresponding to the validation partition
-            gset_val = GuitarSet(base_dir=None,
-            #gset_val = GuitarSet(base_dir=gset_bsdir,
+            #gset_val = GuitarSet(base_dir=None,
+            gset_val = GuitarSet(base_dir=gset_bsdir,
                                  splits=val_splits,
                                  hop_length=hop_length,
                                  sample_rate=sample_rate,
@@ -193,7 +196,7 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
 
         print('Initializing model...')
 
-        matrix_path = os.path.join('..', 'generated', 'matrices', f'<inhibition_matrix>.npz')
+        #matrix_path = os.path.join('..', 'generated', 'matrices', f'dadagp_r1_silence_p100.npz')
 
         # Initialize a new instance of the model
         tabcnn = TabCNNLogistic(dim_in=dim_in,
@@ -201,15 +204,27 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
                                 in_channels=data_proc.get_num_channels(),
                                 model_complexity=model_complexity,
                                 #matrix_path=matrix_path,
-                                silence_activations=False,
+                                silence_activations=True,
                                 device=gpu_id)
-        #tabcnn = TabCNN(dim_in=dim_in,
-        #                profile=profile,
-        #                in_channels=data_proc.get_num_channels(),
-        #                model_complexity=model_complexity,
-        #                device=gpu_id)
+        #tabcnn = TabCNNRecurrent(dim_in=dim_in,
+        #                         profile=profile,
+        #                         in_channels=data_proc.get_num_channels(),
+        #                         model_complexity=model_complexity,
+        #                         device=gpu_id)
         tabcnn.change_device()
         tabcnn.train()
+
+        """
+        class MyDataParallel(torch.nn.DataParallel):
+            def __getattr__(self, name):
+                module = object.__getattribute__(self, "_modules")["module"]
+                if name == "module":
+                    return module
+                return getattr(module, name)
+
+        tabcnn = MyDataParallel(tabcnn, device_ids=[gpu_id])
+        tabcnn.to(torch.device(gpu_id))
+        """
 
         """
         # TODO - remove later
@@ -222,11 +237,11 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
                                profile=profile,
                                save_loc=gset_cache)
         weighting = compute_balanced_class_weighting(gset_full_train, profile, True)
-        tabcnn.dense[-1].set_weights(weighting)
+        tabcnn.dense[-1].set_weights(weighting, device=gpu_id)
         """
 
         # Initialize a new optimizer for the model parameters
-        optimizer = torch.optim.Adam(tabcnn.parameters(), learning_rate)
+        optimizer = torch.optim.Adadelta(tabcnn.parameters(), learning_rate)
 
         # Define the visualization function with the root directory
         def vis_fnc(model, i):
@@ -244,10 +259,10 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
             os.makedirs(final_dir, exist_ok=True)
 
             # Indicate whether the raw activations will include a silent string activation
-            silent_class = False
+            silent_class = True
 
             # Initialize a matrix trainer for visualizing the pairwise likelihood of activations
-            trainer = InhibitionMatrixTrainer(profile, silent_string=silent_class, root=10)
+            trainer = InhibitionMatrixTrainer(profile, silent_string=silent_class, root=1)
 
             # Determine the parameters of the tablature
             num_strings = profile.get_num_dofs()
@@ -283,7 +298,7 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
 
                 # Add the softmax activations to the inhibition matrix trainer
                 trainer.step(smax_activations)
-
+                """
                 # Package the predictions and ground-truth together for post-processing
                 output = {tools.KEY_OUTPUT: deepcopy(raw_predictions),
                           tools.KEY_TABLATURE: track_data[tools.KEY_TABLATURE].to(model.device)}
@@ -338,12 +353,13 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
                 fig.savefig(final_path, bbox_inches='tight')
                 # Close the figure
                 plt.close(fig)
+                """
 
             # Compute the pairwise activations
             pairwise_activations = trainer.compute_current_matrix()
 
             # Construct a save path for the pairwise weights
-            inhibition_path = os.path.join(save_dir, 'inhibition', f'{track_name}-checkpoint-{i}.jpg')
+            inhibition_path = os.path.join(save_dir, 'inhibition', f'checkpoint-{i}.jpg')
             # Make sure the save directory exists
             os.makedirs(os.path.dirname(inhibition_path), exist_ok=True)
 
@@ -356,7 +372,7 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
             # Close the figure
             plt.close(fig)
 
-        # Visualize the filterbank before conducting any training
+        # Visualize the activations before conducting any training
         vis_fnc(tabcnn, 0)
 
         print('Training model...')

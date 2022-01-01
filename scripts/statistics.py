@@ -6,7 +6,7 @@ from amt_tools.features import CQT
 
 import amt_tools.tools as tools
 
-from inhibition.inhibition_matrix import load_inhibition_matrix
+from inhibition.inhibition_matrix import load_inhibition_matrix, trim_inhibition_matrix
 from models.tablature_layers import LogisticTablatureEstimator
 
 # Regular imports
@@ -193,11 +193,6 @@ def compute_dataset_inhibition_loss(tablature_dataset, inhibition_matrix, profil
 
 
 if __name__ == '__main__':
-    matrix_path = 'path/to/matrix'
-
-    # Load the inhibition matrix
-    inhibition_matrix = load_inhibition_matrix(matrix_path)
-
     # Initialize the default guitar profile
     profile = tools.GuitarProfile(num_frets=19)
 
@@ -241,6 +236,18 @@ if __name__ == '__main__':
     alternative_weighting = compute_alternative_class_weighting(tablature_dataset, profile)
 
     print(f'Alternative Weighting : \n{alternative_weighting}')
+
+    matrix_path = 'path/to/matrix'
+
+    # Load the inhibition matrix
+    inhibition_matrix = load_inhibition_matrix(matrix_path)
+
+    # Extract tablature parameters
+    num_strings = profile.get_num_dofs()
+    num_pitches = profile.num_pitches
+
+    # Trim the inhibition matrix to match the chosen profile
+    inhibition_matrix = trim_inhibition_matrix(inhibition_matrix, num_strings, num_pitches, silent_string=True)
 
     # Compute the inhibition loss on the full dataset
     inhibition_loss = compute_dataset_inhibition_loss(tablature_dataset, inhibition_matrix, profile, True)
