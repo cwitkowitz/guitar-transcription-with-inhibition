@@ -4,88 +4,109 @@
 # My imports
 import amt_tools.tools as tools
 
-from guitarpro_jams_utils import validate_gpro_track, get_all_notes_from_track, convert_notes_per_string_to_jams
+from guitarpro_jams_utils import validate_gpro_track, extract_stacked_notes_gpro_track, convert_notes_per_string_to_jams
 
 # Regular imports
 import guitarpro
 import random
 import os
 
+# TODO - add to a constants.py?
 VALID_GP_EXTS = ['.gp3', '.gp4', '.gp5']
 INVALID_EXTS = ['.pygp', '.gp2tokens2gp']
+COPY_TAG = ' copy'
 
-remove_duplicates = True
 
-# Set the seed for random number generation
-random.seed(0)
+def get_valid_files(base_dir, ignore_duplicates=True):
+    """
+    Walk through a base directory and keep track of all relevant GuitarPro files.
 
-# Construct a path to the base directory
-base_dir = os.path.join(tools.HOME, 'Desktop', 'Datasets', 'DadaGP')
+    Parameters
+    ----------
+    base_dir : string
+      Path to the base directory to recursively search
+    ignore_duplicates : bool
+      Whether to remove exact duplicates and inferred duplicates
 
-# Construct a path to the JAMS directory
-jams_dir = os.path.join(base_dir, 'jams')
+    Returns
+    ----------
+    tracked_files : list of str
+      List of file names found
+    tracked_paths : list of str
+      List of paths corresponding to tracked files
+    """
 
-# Make sure the JAMS directory exists
-os.makedirs(jams_dir, exist_ok=True)
+    # Keep track of valid GuitarPro files
+    tracked_paths, tracked_files = list(), list()
 
-# Keep track of valid GuitarPro files
-tracked_paths, tracked_files = list(), list()
+    # Traverse through all paths within the base directory
+    for dir_path, dirs, files in os.walk(base_dir):
+        # Ignore directories with no files (only directories)
+        if not len(files):
+            continue
 
-# Traverse through all paths within the base directory
-for dir_path, dirs, files in os.walk(base_dir):
-    # Ignore directories with no files (only directories)
-    if not len(files):
-        continue
+        # Obtain a list of valid GuitarPro files within the current directory
+        valid_files = sorted([f for f in files
+                              if os.path.splitext(f)[-1] in VALID_GP_EXTS
+                              and INVALID_EXTS[0] not in f
+                              and INVALID_EXTS[1] not in f
+                              # Remove (exact) duplicates
+                              and not (f in tracked_files and ignore_duplicates)])
 
-    # Obtain a list of valid GuitarPro files within the current directory
-    valid_files = sorted([f for f in files
-                          if os.path.splitext(f)[-1] in VALID_GP_EXTS
-                          and INVALID_EXTS[0] not in f
-                          and INVALID_EXTS[1] not in f
-                          and not (f in tracked_files and remove_duplicates)])
+        # Remove (inferred) duplicates within the directory
+        if ignore_duplicates:
+            # Obtain a list of copied files
+            copied_files = [f for f in valid_files if COPY_TAG in f]
 
-    # Remove duplicates within the directory
-    if remove_duplicates:
-        # Obtain a list of copied files
-        copied_files = [f for f in valid_files if ' copy' in f]
+            # Loop through copies in the directory
+            for f in copied_files:
+                # Determine the name of the original file
+                f_name, ext = os.path.splitext(f)[0][:-len(COPY_TAG)], os.path.splitext(f)[-1]
+                # Construct paths to the copy and original
+                copy_path = os.path.join(dir_path, f)
+                orig_path = os.path.join(dir_path, f_name + ext)
 
-        # Loop through copies in the directory
-        for f in copied_files:
-            # Determine the name of the original file
-            f_name, ext = os.path.splitext(f)[0][:-5], os.path.splitext(f)[-1]
-            # Construct paths to the copy and original
-            copy_path = os.path.join(dir_path, f)
-            orig_path = os.path.join(dir_path, f_name + ext)
+                # Remove copies if they have the same file size
+                # TODO - should we make this specification?
+                # if os.path.getsize(copy_path) == os.path.getsize(orig_path):
+                valid_files.remove(f)
 
-            # Remove copies if they have the same file size
-            # TODO - should we make this specification?
-            #if os.path.getsize(copy_path) == os.path.getsize(orig_path):
-            valid_files.remove(f)
+            # Create a copy of the valid files to iterate through
+            valid_files_copy = valid_files.copy()
 
-        # Create a copy of the valid files to iterate through
-        valid_files_copy = valid_files.copy()
+            # Loop through the current valid files list
+            for i in range(0, len(valid_files) - 1):
+                # Obtain the current and next valid file
+                curr_file, next_file = valid_files_copy[i], valid_files_copy[i + 1]
+                # Check if the two files share the same name
+                if os.path.splitext(curr_file)[0] == os.path.splitext(next_file)[0]:
+                    # Remove the current file (should be earlier version)
+                    valid_files.remove(curr_file)
 
-        # Loop through the current valid files list
-        for i in range(0, len(valid_files) - 1):
-            # Obtain the current and next valid file
-            curr_file, next_file = valid_files_copy[i], valid_files_copy[i + 1]
-            # Check if the two files share the same name
-            if os.path.splitext(curr_file)[0] == os.path.splitext(next_file)[0]:
-                # Remove the current file (should be earlier version)
-                valid_files.remove(curr_file)
+        # Add valid files to tracked list
+        tracked_files += valid_files
 
-    # Add valid files to tracked list
-    tracked_files += valid_files
+        # Update the tracked paths
+        tracked_paths += [dir_path] * len(valid_files)
 
-    # Update the tracked paths
-    tracked_paths += [dir_path] * len(valid_files)
+    return tracked_files, tracked_paths
 
-# Loop through the tracked GuitarPro files
-for i, gpro_file in enumerate(tracked_files):
-    print(f'Processing track \'{gpro_file}\'...')
 
-    # Construct a path to the GuitarPro file
-    gpro_path = os.path.join(tracked_paths[i], gpro_file)
+def guitarpro_to_jams(gpro_path, jams_dir):
+    """
+    Convert a GuitarPro file to a JAMS file specifying notes for each track.
+    TODO - add others stuff (beats, key, tempo, etc.) to the JAMS files
+
+    Parameters
+    ----------
+    gpro_path : string
+      Path to a preexisting GuitarPro file to convert
+    jams_dir : bool
+      Directory under which to place the JAMS files
+    """
+
+    # Make sure the JAMS directory exists
+    os.makedirs(jams_dir, exist_ok=True)
 
     # Extract the GuitarPro data from the file
     gpro_data = guitarpro.parse(gpro_path)
@@ -99,13 +120,41 @@ for i, gpro_file in enumerate(tracked_files):
             # Construct a path to the JAMS file to be created
             jams_path = os.path.join(jams_dir, f'{track_name}.{tools.JAMS_EXT}')
 
-            # TODO - cleaned up following two functions
+            # TODO - clean up following two functions
             try:
                 # Extract notes from the track, given the listed tempo
-                notes_per_string = get_all_notes_from_track(gpro_track, gpro_data.tempo)
+                notes_per_string = extract_stacked_notes_gpro_track(gpro_track, gpro_data.tempo)
                 # Write the JAMS files
                 # TODO - only if the track is not completely silent
                 # TODO - dealing with negative duration?
                 convert_notes_per_string_to_jams(notes_per_string, jams_path)
             except:
                 continue
+
+
+if __name__ == '__main__':
+    # Construct a path to the base directory
+    #base_dir = 'path/to/DadaGP'
+    base_dir = os.path.join(tools.HOME, 'Desktop', 'Datasets', 'DadaGP')
+
+    # Search the specified path for GuitarPro files
+    tracked_files, tracked_paths = get_valid_files(base_dir)
+
+    # Construct a path to the JAMS directory
+    jams_dir = os.path.join(base_dir, 'jams')
+
+    # Loop through the tracked GuitarPro files
+    for k, gpro_file in enumerate(tracked_files):
+        # TODO - remove
+        #if not ('Suck My Kiss' in gpro_file):
+        #if not ('Pink Floyd - If' in gpro_file):
+        if not ('Nothing else matters (7)' in gpro_file):
+            continue
+
+        print(f'Processing track \'{gpro_file}\'...')
+
+        # Construct a path to the GuitarPro file
+        gpro_path = os.path.join(tracked_paths[k], gpro_file)
+
+        # Perform the conversion
+        guitarpro_to_jams(gpro_path, jams_dir)

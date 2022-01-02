@@ -18,9 +18,36 @@ Getting TuxGuitar to play sound: https://ubuntuforums.org/showthread.php?t=18714
 
 # TODO - clean this file up
 
-QUARTER_LENGTH_TICKS = 960
+TICKS_PER_QUARTER_NOTE = 960
+
 STANDARD_TUNING = np.array([64, 59, 55, 50, 45, 40])
 FORBIDDEN_CHARACTERS = ['/', '*', '|', '\"']
+
+
+def ticks_to_seconds(ticks, tempo, ticks_per_quarter):
+    """
+    Convert an amount of ticks to a concrete time.
+
+    Parameters
+    ----------
+    ticks : int or float
+      Amount of ticks
+    tempo : int or float
+      Number of beats per minute
+    ticks_per_quarter : int or float
+      TODO - just use constant if we don't need to factor in beat value
+      Number of ticks corresponding to a quarter beat
+
+    Returns
+    ----------
+    time : float
+      Time in seconds corresponding to number of ticks
+    """
+
+    # Number of seconds per beat times number of quarter beats
+    time = (60 / tempo) * ticks / ticks_per_quarter
+
+    return time
 
 class Note(object):
     def __init__(self,fret,string,time,duration,):
@@ -123,8 +150,7 @@ def validate_gpro_track(gpro_track, tuning=None):
     return valid
 
 
-def get_all_notes_from_track(track, tempo):
-#def extract_stacked_notes_gpro_track(grpo_track, tempo):
+def extract_stacked_notes_gpro_track(grpo_track, tempo):
     """
     Extract MIDI notes spread across strings within a GuitarPro track into a dictionary.
 
@@ -141,33 +167,38 @@ def get_all_notes_from_track(track, tempo):
       Dictionary containing (slice -> (pitches, intervals)) pairs
     """
 
+    # TODO - probably don't need this
     note_tracker = NoteTracker(tempo)
 
-    measures = track.measures
-    for m in measures:
-        time_signature = (m.timeSignature.numerator, m.timeSignature.denominator.value)
-        beat_len_ticks = 960 / (time_signature[1] / 4)
-        note_tracker.set_beat_len_ticks(beat_len_ticks)
+    # Loop through the track's measures
+    # TODO - while loop to deal with repeats?
+    for measure in grpo_track.measures:
+        # Extract the time signature information
+        num_beats = measure.timeSignature.numerator
+        beat_value = measure.timeSignature.denominator.value
 
-        measure_end_ticks = m.end
+        # Determine how many ticks correspond to the beat value
+        # TODO - I'm not sure if this is actually necessary - verify for 6/8
+        #ticks_per_beat = TICKS_PER_QUARTER_NOTE / (beat_value / 4)
+        #note_tracker.set_beat_len_ticks(beat_len_ticks)
 
-        voices = m.voices
-        for v in voices:
-            beats = v.beats
-            for i,b in enumerate(beats):
-                notes = b.notes
-                if len(notes) == 0:
+        # Loop through voices within the measure
+        for voice in measure.voices:
+            # Loop through the beat divisions of the measure
+            for i, beat in enumerate(voice.beats):
+                # Check if there are notes to process
+                if len(beat.notes) == 0:
                     continue
 
-                curr_beat_start_time_ticks = b.start
-                if i < len(beats)-1:
-                    curr_beat_end_time_ticks = beats[i+1].start
-                else:
-                    curr_beat_end_time_ticks = measure_end_ticks
-                curr_beat_duration_ticks = curr_beat_end_time_ticks - curr_beat_start_time_ticks
+                # Extract the timing information of the beat division
+                # TODO - subtract 1 from stop tick to avoid frame overlap on boundary?
+                start_tick, stop_tick = beat.start, beat.duration.time
+                duration = start_tick + stop_tick
 
-                for n in notes:
-                    note_tracker.add_note(n,time_ticks=curr_beat_start_time_ticks, duration_ticks=curr_beat_duration_ticks)
+                # Loop through the notes in the beat division
+                for note in beat.notes:
+                    # TODO - do we need to worry about any NoteEffects
+                    note_tracker.add_note(note,time_ticks=curr_beat_start_time_ticks, duration_ticks=curr_beat_duration_ticks)
 
     return note_tracker.get_final_notes_per_string()
 
