@@ -6,25 +6,17 @@ import amt_tools.tools as tools
 
 # Regular imports
 import numpy as np
-import guitarpro
 import librosa
 import jams
-import os
-
-"""
-See https://github.com/Perlence/PyGuitarPro/tree/master/examples
-Getting TuxGuitar to play sound: https://ubuntuforums.org/showthread.php?t=1871443
-"""
-
-# TODO - clean this file up
 
 TICKS_PER_QUARTER_NOTE = 960
+NOTE_TYPE_ENUM_REST    = 'rest'
+NOTE_TYPE_ENUM_NORMAL  = 'normal'
+NOTE_TYPE_ENUM_TIE     = 'tie'
+NOTE_TYPE_ENUM_DEAD    = 'dead'
 
-STANDARD_TUNING = np.array([64, 59, 55, 50, 45, 40])
-FORBIDDEN_CHARACTERS = ['/', '*', '|', '\"']
 
-
-def ticks_to_seconds(ticks, tempo, ticks_per_quarter):
+def ticks_to_seconds(ticks, tempo):
     """
     Convert an amount of ticks to a concrete time.
 
@@ -34,9 +26,6 @@ def ticks_to_seconds(ticks, tempo, ticks_per_quarter):
       Amount of ticks
     tempo : int or float
       Number of beats per minute
-    ticks_per_quarter : int or float
-      TODO - just use constant if we don't need to factor in beat value
-      Number of ticks corresponding to a quarter beat
 
     Returns
     ----------
@@ -45,59 +34,205 @@ def ticks_to_seconds(ticks, tempo, ticks_per_quarter):
     """
 
     # Number of seconds per beat times number of quarter beats
-    time = (60 / tempo) * ticks / ticks_per_quarter
+    time = (60 / tempo) * ticks / TICKS_PER_QUARTER_NOTE
 
     return time
 
-class Note(object):
-    def __init__(self,fret,string,time,duration,):
-        self.fret = fret
-        self.string = string
-        self.time = time
-        self.duration = duration
-        self.pitch = STANDARD_TUNING[self.string] + self.fret
 
-    def add_duration(self, duration):
+class Note(object):
+    """
+    Simple class representing a guitar note for use during GuitarPro file processing.
+    """
+
+    def __init__(self, fret, onset, duration, string=None):
+        """
+        Initialize a guitar note.
+
+        Parameters
+        ----------
+        fret : int
+          Fret the note was played on
+        onset : float
+          Time of the beginning of the note in seconds
+        duration : float
+          Amount of time after the onset where the note is still active
+        string : int (Optional)
+          Numerical indicator for the string the note was played on
+        """
+
+        self.string = string
+        self.fret = fret
+        self.onset = onset
+        self.duration = duration
+
+    def get_absolute_pitch(self, tuning=None):
+        """
+        Determine the absolute MIDI pitch of the note.
+        TODO - is this function necessary? is it used for anything?
+
+        Parameters
+        ----------
+        tuning : list or ndarray
+            MIDI pitch of each open-string
+
+        Returns
+        ----------
+        absolute_pitch : int
+          MIDI pitch of the note
+        """
+
+        if tuning is None:
+            # Default the guitar tuning
+            tuning = librosa.note_to_midi(tools.DEFAULT_GUITAR_TUNING)
+
+        # Add the fret to the open-string's MIDI pitch
+        absolute_pitch = tuning[self.string] + self.fret
+
+        return absolute_pitch
+
+    def extend_note(self, duration):
+        """
+        Extend the note by a specified amount of time.
+
+        Parameters
+        ----------
+        duration : float
+          Amount of time to extend the note
+        """
+
         self.duration += duration
 
 
 class NoteTracker(object):
-    def __init__(self,tempo):
-        self.tempo = tempo
-        self.beat_len_ticks = None
-        self.finished_notes_per_string = [[],[],[],[],[],[]]
-        self.last_notes = [None,None,None,None,None,None]
+    """
+    Simple class to keep track of state while tracking notes in a GuitarPro file.
+    """
 
-    def set_beat_len_ticks(self, beat_len_ticks):
-        self.beat_len_ticks = beat_len_ticks
+    def __init__(self, default_tempo, tuning=None):
+        """
+        Initialize the state of the tracker.
 
-    def convert_ticks_to_seconds(self,ticks):
-        return ticks / self.beat_len_ticks /self.tempo * 60
+        Parameters
+        ----------
+        default_tempo : int or float
+          Underlying tempo of the track
+        tuning : list or ndarray
+            MIDI pitch of each open-string
+        """
 
-    def add_note(self, gp_note, time_ticks, duration_ticks):
-        fret = gp_note.value
-        string = gp_note.string - 1
-        type = gp_note.type.name # for normal notes, name is "normal" and value 1
+        # Keep track of both the underlying and current tempo
+        self.default_tempo = default_tempo
+        self.current_tempo = default_tempo
 
-        time_seconds = self.convert_ticks_to_seconds(time_ticks)
-        duration_seconds = self.convert_ticks_to_seconds(duration_ticks)
-        note = Note(string=string, fret=fret,time=time_seconds,duration=duration_seconds)
+        if tuning is None:
+            # Default the guitar tuning
+            tuning = librosa.note_to_midi(tools.DEFAULT_GUITAR_TUNING)
 
-        if self.last_notes[string] is None:
-            self.last_notes[string] = note
+        # Keep track of the tuning and string names
+        self.string_keys = librosa.midi_to_note(tuning)
+
+        # Dictionary to hold all notes
+        self.stacked_gpro_notes = dict()
+        # Loop though the tuning from lowest to highest note
+        for pitch in sorted(tuning):
+            # Determine the corresponding key for the string
+            key = librosa.midi_to_note(pitch)
+            # Add an empty list as an entry for the string
+            self.stacked_gpro_notes[key] = list()
+
+    def set_current_tempo(self, tempo=None):
+        """
+        Update the currently tracked tempo.
+
+        Parameters
+        ----------
+        tempo : int or float (Optional)
+          New tempo
+        """
+
+        if tempo is None:
+            # Reset the current tempo to the default
+            self.current_tempo = self.default_tempo
         else:
-            if type == "normal":
-                self.finished_notes_per_string[string].append(self.last_notes[string])
-                self.last_notes[string] = note
-            else:
-                self.last_notes[string].add_duration(duration_seconds)
+            # Update the current tempo
+            self.current_tempo = tempo
 
-    def get_final_notes_per_string(self):
-        for n in self.last_notes:
-            if n is not None:
-                self.finished_notes_per_string[n.string].append(n)
+    def track_note(self, gpro_note):
+        """
+        Update the currently tracked tempo.
 
-        return self.finished_notes_per_string
+        Parameters
+        ----------
+        gpro_note : PyGuitarPro Note object
+          GuitarPro note information
+        """
+
+        # Extraction all relevant note information
+        string_idx, fret, type = gpro_note.string - 1, gpro_note.value, gpro_note.type.name
+
+        # Extract the timing information of the beat division
+        # TODO - subtract 1 from duration to avoid frame overlap on boundary?
+        onset_tick, duration_ticks = gpro_note.beat.start, gpro_note.beat.duration.time
+
+        # Convert the note onset and duration from ticks to seconds
+        onset_seconds = ticks_to_seconds(onset_tick, self.current_tempo)
+        duration_seconds = ticks_to_seconds(duration_ticks, self.current_tempo)
+
+        # TODO - remove this if it never happens
+        if gpro_note.durationPercent != 1.0:
+            print()
+
+        # Scale the duration by the duration percentage
+        duration_seconds *= gpro_note.durationPercent
+
+        # Create a note object to keep track of the GuitarPro note
+        note = Note(fret, onset_seconds, duration_seconds, string_idx)
+
+        # Get the key corresponding to the string index
+        key = self.string_keys[string_idx]
+
+        if type == NOTE_TYPE_ENUM_NORMAL:
+            # Add the new note to the dictionary under the respective string
+            self.stacked_gpro_notes[key].append(note)
+        elif type == NOTE_TYPE_ENUM_TIE:
+            # Determine the last note that occurred on the string
+            last_gpro_note = self.stacked_gpro_notes[key][-1]# \
+                             #if len(self.stacked_gpro_notes[key]) else None <- should never happen if we get a tie
+            # Extend the previous note by the current beat's duration
+            last_gpro_note.extend_note(duration_seconds)
+            self.stacked_gpro_notes[key][-1] = last_gpro_note
+        else:
+            pass
+
+    def get_stacked_notes(self):
+        """
+        Obtain the tracked GuitarPro notes as stacked notes.
+
+        Returns
+        ----------
+        stacked_notes : dict
+          Dictionary containing (slice -> (pitches, intervals)) pairs
+        """
+
+        # Initialize a new dictionary to hold the notes
+        stacked_notes = dict()
+
+        # Loop through all strings
+        for key in self.string_keys:
+            # Initialize empty arrays to hold note contents
+            pitches, intervals = np.empty(0), np.empty((0, 2))
+
+            # Loop through all the GuitarPro notes for the string
+            for note in self.stacked_gpro_notes[key]:
+                # Add the absolute pitch of the note
+                pitches = np.append(pitches, librosa.note_to_midi(key) + note.fret)
+                # Add the onset and offset of the note
+                intervals = np.append(intervals, [[note.onset, note.onset + note.duration]], axis=0)
+
+            # Populate the dictionary with the notes for the string
+            stacked_notes.update(tools.notes_to_stacked_notes(pitches, intervals, key))
+
+        return stacked_notes
 
 
 def validate_gpro_track(gpro_track, tuning=None):
@@ -150,7 +285,7 @@ def validate_gpro_track(gpro_track, tuning=None):
     return valid
 
 
-def extract_stacked_notes_gpro_track(grpo_track, tempo):
+def extract_stacked_notes_gpro_track(gpro_track, default_tempo):
     """
     Extract MIDI notes spread across strings within a GuitarPro track into a dictionary.
 
@@ -158,7 +293,7 @@ def extract_stacked_notes_gpro_track(grpo_track, tempo):
     ----------
     gpro_track : Track object (PyGuitarPro)
       GuitarPro track data
-    tempo : int
+    default_tempo : int
       Track tempo for inferring note onset and duration
 
     Returns
@@ -167,21 +302,14 @@ def extract_stacked_notes_gpro_track(grpo_track, tempo):
       Dictionary containing (slice -> (pitches, intervals)) pairs
     """
 
-    # TODO - probably don't need this
-    note_tracker = NoteTracker(tempo)
+    # Obtain the tuning of the strings of the track
+    tuning = [string.value for string in gpro_track.strings]
+    # Initialize a tracker to keep track of GuitarPro notes
+    note_tracker = NoteTracker(default_tempo, tuning)
 
     # Loop through the track's measures
-    # TODO - while loop to deal with repeats?
-    for measure in grpo_track.measures:
-        # Extract the time signature information
-        num_beats = measure.timeSignature.numerator
-        beat_value = measure.timeSignature.denominator.value
-
-        # Determine how many ticks correspond to the beat value
-        # TODO - I'm not sure if this is actually necessary - verify for 6/8
-        #ticks_per_beat = TICKS_PER_QUARTER_NOTE / (beat_value / 4)
-        #note_tracker.set_beat_len_ticks(beat_len_ticks)
-
+    # TODO - while loop to deal with repeats (invalidates method for obtaining onset and duration)?
+    for n, measure in enumerate(gpro_track.measures):
         # Loop through voices within the measure
         for voice in measure.voices:
             # Loop through the beat divisions of the measure
@@ -190,17 +318,29 @@ def extract_stacked_notes_gpro_track(grpo_track, tempo):
                 if len(beat.notes) == 0:
                     continue
 
-                # Extract the timing information of the beat division
-                # TODO - subtract 1 from stop tick to avoid frame overlap on boundary?
-                start_tick, stop_tick = beat.start, beat.duration.time
-                duration = start_tick + stop_tick
+                # Check if there are any tempo changes
+                if beat.effect.mixTableChange is not None:
+                    # TODO - remove this later
+                    print(n, beat.effect.mixTableChange)
+
+                    # Extract the updated tempo
+                    new_tempo = beat.effect.mixTableChange.tempo.value
+                    # Update the tempo of the note tracker
+                    note_tracker.set_current_tempo(new_tempo)
+
+                    # TODO - remove this if it never happens
+                    if beat.effect.mixTableChange.tempo.duration != 0:
+                        print()
 
                 # Loop through the notes in the beat division
                 for note in beat.notes:
-                    # TODO - do we need to worry about any NoteEffects
-                    note_tracker.add_note(note,time_ticks=curr_beat_start_time_ticks, duration_ticks=curr_beat_duration_ticks)
+                    # TODO - how to deal with letRing, staccato, and other NoteEffects?
+                    note_tracker.track_note(note)
 
-    return note_tracker.get_final_notes_per_string()
+    # Obtain the final tracked notes
+    stacked_notes = note_tracker.get_stacked_notes()
+
+    return stacked_notes
 
 
 def convert_notes_per_string_to_jams(notes_per_string, path_out):
@@ -228,9 +368,9 @@ def convert_notes_per_string_to_jams(notes_per_string, path_out):
 
         duration_track_string = 0
         for n in curr_notes:
-            ann.append(time=n.time, duration=n.duration, value=n.pitch)
-            if n.time + n.duration > duration_track_string:
-                duration_track_string = n.time + n.duration
+            ann.append(time=n.onset, duration=n.duration, value=n.get_absolute_pitch())
+            if n.onset + n.duration > duration_track_string:
+                duration_track_string = n.onset + n.duration
 
         # ann.duration = duration_track_string # use thiis if each string annotation should be labeled with the duration of the individual string
 
