@@ -7,7 +7,6 @@ import amt_tools.tools as tools
 # Regular imports
 import numpy as np
 import librosa
-import jams
 
 TICKS_PER_QUARTER_NOTE = 960
 NOTE_TYPE_ENUM_REST    = 'rest'
@@ -65,31 +64,6 @@ class Note(object):
         self.onset = onset
         self.duration = duration
 
-    def get_absolute_pitch(self, tuning=None):
-        """
-        Determine the absolute MIDI pitch of the note.
-        TODO - is this function necessary? is it used for anything?
-
-        Parameters
-        ----------
-        tuning : list or ndarray
-            MIDI pitch of each open-string
-
-        Returns
-        ----------
-        absolute_pitch : int
-          MIDI pitch of the note
-        """
-
-        if tuning is None:
-            # Default the guitar tuning
-            tuning = librosa.note_to_midi(tools.DEFAULT_GUITAR_TUNING)
-
-        # Add the fret to the open-string's MIDI pitch
-        absolute_pitch = tuning[self.string] + self.fret
-
-        return absolute_pitch
-
     def extend_note(self, duration):
         """
         Extend the note by a specified amount of time.
@@ -100,7 +74,7 @@ class Note(object):
           Amount of time to extend the note
         """
 
-        self.duration += duration
+        self.duration = duration
 
 
 class NoteTracker(object):
@@ -157,7 +131,21 @@ class NoteTracker(object):
             # Update the current tempo
             self.current_tempo = tempo
 
-    def track_note(self, gpro_note):
+    def get_current_tempo(self):
+        """
+        Obtain the currently tracked tempo.
+
+        Returns
+        ----------
+        tempo : int or float (Optional)
+          Current tracked tempo
+        """
+
+        tempo = self.current_tempo
+
+        return tempo
+
+    def track_note(self, gpro_note, onset, duration):
         """
         Update the currently tracked tempo.
 
@@ -165,28 +153,26 @@ class NoteTracker(object):
         ----------
         gpro_note : PyGuitarPro Note object
           GuitarPro note information
+        onset : float
+          Time the note begins in seconds
+        duration : float
+          Amount of time the note is active
         """
 
         # Extraction all relevant note information
         string_idx, fret, type = gpro_note.string - 1, gpro_note.value, gpro_note.type.name
 
-        # Extract the timing information of the beat division
-        # TODO - subtract 1 from duration to avoid frame overlap on boundary?
-        onset_tick, duration_ticks = gpro_note.beat.start, gpro_note.beat.duration.time
-
-        # Convert the note onset and duration from ticks to seconds
-        onset_seconds = ticks_to_seconds(onset_tick, self.current_tempo)
-        duration_seconds = ticks_to_seconds(duration_ticks, self.current_tempo)
+        # TODO - determine how to deal with letRing, staccato, and other NoteEffects
 
         # TODO - remove this if it never happens
         if gpro_note.durationPercent != 1.0:
             print()
 
         # Scale the duration by the duration percentage
-        duration_seconds *= gpro_note.durationPercent
+        duration *= gpro_note.durationPercent
 
         # Create a note object to keep track of the GuitarPro note
-        note = Note(fret, onset_seconds, duration_seconds, string_idx)
+        note = Note(fret, onset, duration, string_idx)
 
         # Get the key corresponding to the string index
         key = self.string_keys[string_idx]
@@ -196,11 +182,13 @@ class NoteTracker(object):
             self.stacked_gpro_notes[key].append(note)
         elif type == NOTE_TYPE_ENUM_TIE:
             # Determine the last note that occurred on the string
-            last_gpro_note = self.stacked_gpro_notes[key][-1]# \
-                             #if len(self.stacked_gpro_notes[key]) else None <- should never happen if we get a tie
-            # Extend the previous note by the current beat's duration
-            last_gpro_note.extend_note(duration_seconds)
-            self.stacked_gpro_notes[key][-1] = last_gpro_note
+            last_gpro_note = self.stacked_gpro_notes[key][-1] \
+                             if len(self.stacked_gpro_notes[key]) else None
+            if last_gpro_note is not None:
+                # Determine how much to extend the note
+                new_duration = onset - last_gpro_note.onset + duration
+                # Extend the previous note by the current beat's duration
+                last_gpro_note.extend_note(new_duration)
         else:
             pass
 
@@ -218,7 +206,7 @@ class NoteTracker(object):
         stacked_notes = dict()
 
         # Loop through all strings
-        for key in self.string_keys:
+        for key in self.stacked_gpro_notes.keys():
             # Initialize empty arrays to hold note contents
             pitches, intervals = np.empty(0), np.empty((0, 2))
 
@@ -268,20 +256,6 @@ def validate_gpro_track(gpro_track, tuning=None):
     # Determine if the track is valid
     valid = not percussive and guitar and expected_strings
 
-    """"""
-    # TODO - remove when there is a check for zero notes in outer script
-    all_notes = []
-    measures = gpro_track.measures
-    for m in measures:
-        voices = m.voices
-        for v in voices:
-            beats = v.beats
-            for i, b in enumerate(beats):
-                notes = b.notes
-                all_notes += notes
-    valid = valid and (len(all_notes) > 0)
-    """"""
-
     return valid
 
 
@@ -307,22 +281,22 @@ def extract_stacked_notes_gpro_track(gpro_track, default_tempo):
     # Initialize a tracker to keep track of GuitarPro notes
     note_tracker = NoteTracker(default_tempo, tuning)
 
+    # Keep track of the amount of time processed so far
+    current_time = None
+
     # Loop through the track's measures
-    # TODO - while loop to deal with repeats (invalidates method for obtaining onset and duration)?
+    # TODO - while loop to deal with repeats?
     for n, measure in enumerate(gpro_track.measures):
         # Loop through voices within the measure
         for voice in measure.voices:
             # Loop through the beat divisions of the measure
             for i, beat in enumerate(voice.beats):
-                # Check if there are notes to process
-                if len(beat.notes) == 0:
-                    continue
+                if current_time is None:
+                    # Set the current time to the start of the measure
+                    current_time = ticks_to_seconds(measure.start, note_tracker.get_current_tempo())
 
                 # Check if there are any tempo changes
                 if beat.effect.mixTableChange is not None:
-                    # TODO - remove this later
-                    print(n, beat.effect.mixTableChange)
-
                     # Extract the updated tempo
                     new_tempo = beat.effect.mixTableChange.tempo.value
                     # Update the tempo of the note tracker
@@ -332,55 +306,30 @@ def extract_stacked_notes_gpro_track(gpro_track, default_tempo):
                     if beat.effect.mixTableChange.tempo.duration != 0:
                         print()
 
+                # Check if there are notes to process
+                if len(beat.notes) == 0:
+                    # Accumulate the total time of the measure
+                    current_time += ticks_to_seconds(measure.length, note_tracker.get_current_tempo())
+                    # Advance to the next measure
+                    continue
+
+                # Extract the timing information of the beat division
+                # TODO - subtract 1 from duration to avoid frame overlap on boundary?
+                onset_tick, duration_ticks = beat.start, beat.duration.time
+
+                # Convert the note onset and duration from ticks to seconds
+                #onset_seconds = ticks_to_seconds(onset_tick, note_tracker.get_current_tempo())
+                duration_seconds = ticks_to_seconds(duration_ticks, note_tracker.get_current_tempo())
+
                 # Loop through the notes in the beat division
                 for note in beat.notes:
-                    # TODO - how to deal with letRing, staccato, and other NoteEffects?
-                    note_tracker.track_note(note)
+                    # Add the note to the tracker
+                    note_tracker.track_note(note, current_time, duration_seconds)
+
+                # Accumulate the time of the beat
+                current_time += duration_seconds
 
     # Obtain the final tracked notes
     stacked_notes = note_tracker.get_stacked_notes()
 
     return stacked_notes
-
-
-def convert_notes_per_string_to_jams(notes_per_string, path_out):
-#def write_stacked_notes_jams(stacked_notes, jams_path):
-    """
-    Helper function to create a JAMS file and populate it with stacked notes.
-
-    Parameters
-    ----------
-    stacked_notes : dict
-      Dictionary containing (slice -> (pitches, intervals)) pairs
-    jams_path : string
-      Path to JAMS file to write
-    """
-
-    jam = jams.JAMS()
-    duration_track = 0
-    for string in np.arange(5,-1,-1):
-        # for string in range(6):
-        curr_notes = notes_per_string[string]
-
-        # ann = jams.Annotation(namespace='note_midi', time=0, duration=jam.file_metadata.duration)
-        ann = jams.Annotation(namespace='note_midi', time=0, duration=0)
-        ann.annotation_metadata = jams.AnnotationMetadata(data_source=5-string) # note: In JAMS the string with index 0 is the low e-string, in GP it is the high e string
-
-        duration_track_string = 0
-        for n in curr_notes:
-            ann.append(time=n.onset, duration=n.duration, value=n.get_absolute_pitch())
-            if n.onset + n.duration > duration_track_string:
-                duration_track_string = n.onset + n.duration
-
-        # ann.duration = duration_track_string # use thiis if each string annotation should be labeled with the duration of the individual string
-
-        jam.annotations.append(ann)
-
-        if duration_track_string > duration_track:
-            duration_track = duration_track_string
-
-    jam.file_metadata.duration = duration_track
-    for ann in jam.annotations:
-        ann.duration = duration_track
-
-    jam.save(path_out)
