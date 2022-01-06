@@ -4,11 +4,11 @@
 # My imports
 import amt_tools.tools as tools
 
-from guitarpro_jams_utils import validate_gpro_track, extract_stacked_notes_gpro_track, convert_notes_per_string_to_jams
+from guitarpro_jams_utils import validate_gpro_track, extract_stacked_notes_gpro_track
 
 # Regular imports
+import numpy as np
 import guitarpro
-import random
 import os
 
 # TODO - add to a constants.py?
@@ -120,16 +120,13 @@ def guitarpro_to_jams(gpro_path, jams_dir):
             # Construct a path to the JAMS file to be created
             jams_path = os.path.join(jams_dir, f'{track_name}.{tools.JAMS_EXT}')
 
-            # TODO - clean up following two functions
-            try:
-                # Extract notes from the track, given the listed tempo
-                notes_per_string = extract_stacked_notes_gpro_track(gpro_track, gpro_data.tempo)
-                # Write the JAMS files
-                # TODO - only if the track is not completely silent
+            # Extract notes from the track, given the listed tempo
+            stacked_notes = extract_stacked_notes_gpro_track(gpro_track, gpro_data.tempo)
+
+            if np.sum([len(stacked_notes[key][0]) for key in stacked_notes.keys()]):
+                # Write the JAMS files if it is not completely silent
+                tools.write_stacked_notes_jams(stacked_notes, jams_path)
                 # TODO - dealing with negative duration?
-                convert_notes_per_string_to_jams(notes_per_string, jams_path)
-            except:
-                continue
 
 
 if __name__ == '__main__':
@@ -146,10 +143,16 @@ if __name__ == '__main__':
     # Loop through the tracked GuitarPro files
     for k, gpro_file in enumerate(tracked_files):
         # TODO - remove
+        # Testing files
         #if not ('Suck My Kiss' in gpro_file):
         #if not ('Pink Floyd - If' in gpro_file):
-        if not ('Nothing else matters (7)' in gpro_file):
+        #if not ('Nothing else matters (7)' in gpro_file):
+        if not ('Prewar - Song Of War.gp3' in gpro_file):
             continue
+        # Error files
+        #if not ('Pillows (The) - Funny Bunny.gp4' in gpro_file):
+        #if not ('Perkins, Carl - Matchbox.gp4' in gpro_file):
+        #    continue
 
         print(f'Processing track \'{gpro_file}\'...')
 

@@ -166,6 +166,7 @@ class SymbolicTablature(TranscriptionDataset):
                 duration = tools.extract_duration_jams(jam)
 
             # Load the notes by string from the JAMS file
+            # TODO - remove frame overlap on same string
             stacked_notes = tools.extract_stacked_notes_jams(jam)
 
             if self.augment_notes:

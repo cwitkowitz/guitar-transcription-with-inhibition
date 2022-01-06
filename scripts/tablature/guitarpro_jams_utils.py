@@ -296,6 +296,8 @@ def extract_stacked_notes_gpro_track(gpro_track, default_tempo):
     current_measure = 0
     # Keep track of the last measure which opened a repeat
     repeat_measure = 0
+    # Keep track of the measure after the most recently encountered repeat close
+    next_jump = None
 
     # Initialize a counter to keep track of how many times a repeat was obeyed
     repeat_count = 0
@@ -305,12 +307,21 @@ def extract_stacked_notes_gpro_track(gpro_track, default_tempo):
         # Process the current measure
         measure = gpro_track.measures[current_measure]
 
-        # TODO - remove this when it is fixed
         if measure.header.repeatAlternative != 0:
+            # TODO - remove this when it is fixed
             print('Repeat Alternative != 0!!!!!!!!')
-            break
+            # I am guessing that this is how 'repeatAlternative' is encoded
+            alt_repeat_num = np.sum([2 ** k for k in range(repeat_count)])
+            # Check if it is time to jump past the repeat close
+            if alt_repeat_num >= measure.header.repeatAlternative:
+                # Jump past the repeat
+                current_measure = next_jump
+                continue
 
-        if measure.isRepeatOpen and repeat_count == 0:
+        # TODO - remove when the trajectory is correct
+        print(f'Current Measure: {current_measure + 1}')
+
+        if measure.isRepeatOpen:
             # Jump back to this measure at the next repeat close
             repeat_measure = current_measure
 
@@ -345,18 +356,17 @@ def extract_stacked_notes_gpro_track(gpro_track, default_tempo):
                 # Accumulate the time of the beat
                 current_time += duration_seconds
 
-        if measure.repeatClose != -1 and repeat_count < measure.repeatClose:
+        if measure.repeatClose > 0:
+            # Set the (alternate repeat) jump to the next measure
+            next_jump = current_measure + 1
             # Jump back to where the repeat begins
             current_measure = repeat_measure
-            # Increment the repeat counter
+            # Decrement the measure's repeat counter
+            measure.repeatClose -= 1
             repeat_count += 1
         else:
-            if measure.repeatClose != -1 and repeat_count == measure.repeatClose:
-                # Reset the repeat measure
-                #repeat_measure = None
-                # Reset the repeat count
+            if measure.repeatClose == 0:
                 repeat_count = 0
-
             # Increment the measure pointer
             current_measure += 1
 
