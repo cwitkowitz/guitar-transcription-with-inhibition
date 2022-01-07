@@ -309,11 +309,15 @@ def extract_stacked_notes_gpro_track(gpro_track, default_tempo):
 
         if measure.header.repeatAlternative != 0:
             # TODO - remove this when it is fixed
-            print('Repeat Alternative != 0!!!!!!!!')
-            # I am guessing that this is how 'repeatAlternative' is encoded
+            print('## Repeat Alternative ##')
+            print(f'Repeat Count {repeat_count}')
+            # The 'repeatAlternative' attribute seems to be encoded as binary a binary vector,
+            # where the integers k in the measure header represent a 1 in the kth digit
             alt_repeat_num = np.sum([2 ** k for k in range(repeat_count)])
             # Check if it is time to jump past the repeat close
             if alt_repeat_num >= measure.header.repeatAlternative:
+                repeat_count = 0
+                measure.header.repeatAlternative = -1
                 # Jump past the repeat
                 current_measure = next_jump
                 continue
@@ -357,6 +361,7 @@ def extract_stacked_notes_gpro_track(gpro_track, default_tempo):
                 current_time += duration_seconds
 
         if measure.repeatClose > 0:
+            print(f'Repeat Count {repeat_count}')
             # Set the (alternate repeat) jump to the next measure
             next_jump = current_measure + 1
             # Jump back to where the repeat begins
@@ -366,6 +371,7 @@ def extract_stacked_notes_gpro_track(gpro_track, default_tempo):
             repeat_count += 1
         else:
             if measure.repeatClose == 0:
+                print(f'Repeat Count {repeat_count}')
                 repeat_count = 0
             # Increment the measure pointer
             current_measure += 1
