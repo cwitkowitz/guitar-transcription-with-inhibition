@@ -5,6 +5,7 @@
 import amt_tools.tools as tools
 
 # Regular imports
+from copy import deepcopy
 import numpy as np
 import librosa
 
@@ -13,7 +14,6 @@ NOTE_TYPE_ENUM_REST    = 'rest'
 NOTE_TYPE_ENUM_NORMAL  = 'normal'
 NOTE_TYPE_ENUM_TIE     = 'tie'
 NOTE_TYPE_ENUM_DEAD    = 'dead'
-DURATION_SCALE         = 1.0
 
 
 def ticks_to_seconds(ticks, tempo):
@@ -165,10 +165,6 @@ class NoteTracker(object):
 
         # TODO - determine how to deal with letRing, staccato, and other NoteEffects
 
-        # TODO - remove this if it never happens
-        if gpro_note.durationPercent != 1.0:
-            print('Duration Percentage of Note != 1.0!!!!!!!!')
-
         # Scale the duration by the duration percentage
         duration *= gpro_note.durationPercent
 
@@ -217,10 +213,8 @@ class NoteTracker(object):
             for note in self.stacked_gpro_notes[key]:
                 # Add the absolute pitch of the note
                 pitches = np.append(pitches, librosa.note_to_midi(key) + note.fret)
-                # Scale the duration to avoid frame overlap between adjacent notes
-                duration = DURATION_SCALE * note.duration
                 # Add the onset and offset of the note
-                intervals = np.append(intervals, [[note.onset, note.onset + duration]], axis=0)
+                intervals = np.append(intervals, [[note.onset, note.onset + note.duration]], axis=0)
 
             # Populate the dictionary with the notes for the string
             stacked_notes.update(tools.notes_to_stacked_notes(pitches, intervals, key))
@@ -281,6 +275,9 @@ def extract_stacked_notes_gpro_track(gpro_track, default_tempo):
       Dictionary containing (slice -> (pitches, intervals)) pairs
     """
 
+    # Make a copy of the track, so that it can be modified without consequence
+    gpro_track = deepcopy(gpro_track)
+
     # Obtain the tuning of the strings of the track
     tuning = [string.value for string in gpro_track.strings]
     # Initialize a tracker to keep track of GuitarPro notes
@@ -308,29 +305,40 @@ def extract_stacked_notes_gpro_track(gpro_track, default_tempo):
         measure = gpro_track.measures[current_measure]
 
         if measure.header.repeatAlternative != 0:
-            # TODO - remove this when it is fixed
-            print('## Repeat Alternative ##')
-            print(f'Repeat Count {repeat_count}')
             # The 'repeatAlternative' attribute seems to be encoded as binary a binary vector,
             # where the integers k in the measure header represent a 1 in the kth digit
             alt_repeat_num = np.sum([2 ** k for k in range(repeat_count)])
             # Check if it is time to jump past the repeat close
             if alt_repeat_num >= measure.header.repeatAlternative:
+                # Reset the external repeat counter
                 repeat_count = 0
+                # Indicate that this measure should always cause a jump from now on
                 measure.header.repeatAlternative = -1
                 # Jump past the repeat
                 current_measure = next_jump
                 continue
 
         # TODO - remove when the trajectory is correct
-        print(f'Current Measure: {current_measure + 1}')
+        #print(f'Current Measure: {current_measure + 1}')
 
         if measure.isRepeatOpen:
             # Jump back to this measure at the next repeat close
             repeat_measure = current_measure
 
+        # TODO - remove this if it never happens
+        if len(measure.voices[1].beats) != 0:
+            num_notes = 0
+            for beat in measure.voices[1].beats:
+                num_notes += len(beat.notes)
+            if num_notes != 0:
+                print('Voice 1 has beats with notes!!!!!!!!')
+
+        # Keep track of the amount of time processed within the measure
+        measure_ticks = [0] * len(measure.voices)
+        measure_time = [0] * len(measure.voices)
+
         # Loop through voices within the measure
-        for voice in measure.voices:
+        for v, voice in enumerate(measure.voices):
             # Loop through the beat divisions of the measure
             for beat in voice.beats:
                 if current_time is None:
@@ -340,14 +348,32 @@ def extract_stacked_notes_gpro_track(gpro_track, default_tempo):
                 # Check if there are any tempo changes
                 if beat.effect.mixTableChange is not None:
                     if beat.effect.mixTableChange.tempo is not None:
+                        # TODO - remove if never happens
+                        if v == 1:
+                            print('Tempo Change in voice 1!!!!!!!!')
                         # Extract the updated tempo
                         new_tempo = beat.effect.mixTableChange.tempo.value
                         # Update the tempo of the note tracker
                         note_tracker.set_current_tempo(new_tempo)
 
-                        # TODO - remove this if it never happens
+                        # TODO - does tempo duration matter? I can't find an example where
+                        #        duration isn't overrode by another tempo change
+                        # TODO - remove if it never happens
                         if beat.effect.mixTableChange.tempo.duration != 0:
-                            print('Tempo Change Duration != 0!!!!!!!!')
+                            print_msg = True
+                            for x in range(beat.effect.mixTableChange.tempo.duration):
+                                if current_measure + x >= len(gpro_track.measures):
+                                    print_msg = False
+                                else:
+                                    test_measure = gpro_track.measures[current_measure + x]
+                                    for test_voice in test_measure.voices:
+                                        # Loop through the beat divisions of the measure
+                                        for test_beat in test_voice.beats:
+                                            if test_beat.effect.mixTableChange is not None:
+                                                if test_beat.effect.mixTableChange.tempo is not None:
+                                                    print_msg = False
+                            if print_msg:
+                                print('Tempo Change Duration != 0 with no immediate tempo change!!!!!!!!')
 
                 # Convert the note duration from ticks to seconds
                 duration_seconds = ticks_to_seconds(beat.duration.time, note_tracker.get_current_tempo())
@@ -355,23 +381,37 @@ def extract_stacked_notes_gpro_track(gpro_track, default_tempo):
                 # Loop through the notes in the beat division
                 for note in beat.notes:
                     # Add the note to the tracker
-                    note_tracker.track_note(note, current_time, duration_seconds)
+                    note_tracker.track_note(note, current_time + measure_time[v], duration_seconds)
 
                 # Accumulate the time of the beat
-                current_time += duration_seconds
+                measure_ticks[v] += beat.duration.time
+                measure_time[v] += duration_seconds
+
+        # TODO - remove this after committing once
+        #if abs(measure_time - ticks_to_seconds(measure.length, note_tracker.get_current_tempo())) > 1E-8:
+        #    print('Beats do not specify an entire measure!!!!!!!')
+
+        # Add the measure time to the current accumulated time
+        current_time += measure_time[0]
+        # Check if all ticks were counted
+        if measure_ticks[0] != measure.length:
+            # Compute the number of ticks missing
+            remaining_ticks = measure.length - measure_ticks[0]
+            # Add the time for the missing ticks
+            current_time += ticks_to_seconds(remaining_ticks, note_tracker.get_current_tempo())
 
         if measure.repeatClose > 0:
-            print(f'Repeat Count {repeat_count}')
             # Set the (alternate repeat) jump to the next measure
             next_jump = current_measure + 1
             # Jump back to where the repeat begins
             current_measure = repeat_measure
             # Decrement the measure's repeat counter
             measure.repeatClose -= 1
+            # Increment the external repeat counter
             repeat_count += 1
         else:
             if measure.repeatClose == 0:
-                print(f'Repeat Count {repeat_count}')
+                # Reset the external repeat counter
                 repeat_count = 0
             # Increment the measure pointer
             current_measure += 1
