@@ -299,6 +299,9 @@ def extract_stacked_notes_gpro_track(gpro_track, default_tempo):
     # Initialize a counter to keep track of how many times a repeat was obeyed
     repeat_count = 0
 
+    # Countdown for temporary tempo changes
+    tempo_change_duration = None
+
     # Loop through the track's measures
     while current_measure < total_num_measures:
         # Process the current measure
@@ -318,20 +321,21 @@ def extract_stacked_notes_gpro_track(gpro_track, default_tempo):
                 current_measure = next_jump
                 continue
 
-        # TODO - remove when the trajectory is correct
-        #print(f'Current Measure: {current_measure + 1}')
+        if tempo_change_duration is not None:
+            # Decrement the tempo change countdown by one measure
+            tempo_change_duration -= 1
+
+            if tempo_change_duration <= 0:
+                # TODO - remove the print statement
+                print('I don\'t think this will ever happen!!!!')
+                # Reset the tempo of the note tracker to default
+                #note_tracker.set_current_tempo()
+                # Turn off tempo change duration tracking
+                tempo_change_duration = None
 
         if measure.isRepeatOpen:
             # Jump back to this measure at the next repeat close
             repeat_measure = current_measure
-
-        # TODO - remove this if it never happens
-        if len(measure.voices[1].beats) != 0:
-            num_notes = 0
-            for beat in measure.voices[1].beats:
-                num_notes += len(beat.notes)
-            if num_notes != 0:
-                print('Voice 1 has beats with notes!!!!!!!!')
 
         # Keep track of the amount of time processed within the measure
         measure_ticks = [0] * len(measure.voices)
@@ -348,32 +352,17 @@ def extract_stacked_notes_gpro_track(gpro_track, default_tempo):
                 # Check if there are any tempo changes
                 if beat.effect.mixTableChange is not None:
                     if beat.effect.mixTableChange.tempo is not None:
-                        # TODO - remove if never happens
-                        if v == 1:
-                            print('Tempo Change in voice 1!!!!!!!!')
                         # Extract the updated tempo
                         new_tempo = beat.effect.mixTableChange.tempo.value
                         # Update the tempo of the note tracker
                         note_tracker.set_current_tempo(new_tempo)
 
-                        # TODO - does tempo duration matter? I can't find an example where
-                        #        duration isn't overrode by another tempo change
-                        # TODO - remove if it never happens
-                        if beat.effect.mixTableChange.tempo.duration != 0:
-                            print_msg = True
-                            for x in range(beat.effect.mixTableChange.tempo.duration):
-                                if current_measure + x >= len(gpro_track.measures):
-                                    print_msg = False
-                                else:
-                                    test_measure = gpro_track.measures[current_measure + x]
-                                    for test_voice in test_measure.voices:
-                                        # Loop through the beat divisions of the measure
-                                        for test_beat in test_voice.beats:
-                                            if test_beat.effect.mixTableChange is not None:
-                                                if test_beat.effect.mixTableChange.tempo is not None:
-                                                    print_msg = False
-                            if print_msg:
-                                print('Tempo Change Duration != 0 with no immediate tempo change!!!!!!!!')
+                        if beat.effect.mixTableChange.tempo.duration == 0:
+                            # Turn off tempo change duration tracking
+                            tempo_change_duration = None
+                        else:
+                            # Set the number of measures to countdown
+                            tempo_change_duration = beat.effect.mixTableChange.tempo.duration
 
                 # Convert the note duration from ticks to seconds
                 duration_seconds = ticks_to_seconds(beat.duration.time, note_tracker.get_current_tempo())
@@ -386,10 +375,6 @@ def extract_stacked_notes_gpro_track(gpro_track, default_tempo):
                 # Accumulate the time of the beat
                 measure_ticks[v] += beat.duration.time
                 measure_time[v] += duration_seconds
-
-        # TODO - remove this after committing once
-        #if abs(measure_time - ticks_to_seconds(measure.length, note_tracker.get_current_tempo())) > 1E-8:
-        #    print('Beats do not specify an entire measure!!!!!!!')
 
         # Add the measure time to the current accumulated time
         current_time += measure_time[0]
