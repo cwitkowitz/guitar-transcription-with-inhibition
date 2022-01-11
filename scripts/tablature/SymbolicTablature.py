@@ -166,7 +166,6 @@ class SymbolicTablature(TranscriptionDataset):
                 duration = tools.extract_duration_jams(jam)
 
             # Load the notes by string from the JAMS file
-            # TODO - remove frame overlap on same string
             stacked_notes = tools.extract_stacked_notes_jams(jam)
 
             if self.augment_notes:
@@ -182,8 +181,9 @@ class SymbolicTablature(TranscriptionDataset):
             # Get the times for the start of each frame
             times = tools.get_frame_times(duration, self.sample_rate, self.hop_length)
 
-            # Convert the string-wise notes into a stacked multi pitch array
-            stacked_multi_pitch = tools.stacked_notes_to_stacked_multi_pitch(stacked_notes, times, self.profile)
+            # Convert the string-wise notes into a stacked multi pitch array,
+            # discarding offsets to circumvent frame overlap on adjacent notes
+            stacked_multi_pitch = tools.stacked_notes_to_stacked_multi_pitch(stacked_notes, times, self.profile, False)
 
             # Convert the stacked multi pitch array into a single representation
             data[tools.KEY_MULTIPITCH] = tools.stacked_multi_pitch_to_multi_pitch(stacked_multi_pitch)

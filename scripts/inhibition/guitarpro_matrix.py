@@ -35,7 +35,7 @@ data_proc = CQT(sample_rate=sample_rate,
 
 # Create a dataset using all of the GuitarPro tablature data
 gpro_train = DadaGP(base_dir=None,
-                    splits=['train'],
+                    splits=['train', 'val'],
                     hop_length=hop_length,
                     sample_rate=sample_rate,
                     num_frames=None,

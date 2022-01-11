@@ -7,6 +7,7 @@ import amt_tools.tools as tools
 from math import inf
 
 import numpy as np
+import os
 
 EPSILON = 1E-10
 
@@ -344,6 +345,9 @@ class InhibitionMatrixTrainer(object):
         """
         Helper function to save a NumPy Zip file containing the inhibition matrix.
         """
+
+        # Make sure the directories leading to the save path exist
+        os.makedirs(os.path.dirname(self.save_path), exist_ok=True)
 
         # Compute the current inhibition matrix
         inhibition_matrix = self.compute_current_matrix()

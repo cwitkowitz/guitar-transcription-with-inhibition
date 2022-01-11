@@ -9,8 +9,7 @@ import os
 
 # Construct a path for loading the inhibition matrix
 #save_path = os.path.join('path', 'to', 'matrix.npz')
-save_path = os.path.join('..', '..', 'generated', 'matrices', 'dadagp_no_aug_p500.npz')
-#save_path = os.path.join('..', '..', 'generated', 'matrices', 'guitarset_00_no_aug_r5.npz')
+save_path = os.path.join('..', '..', 'generated', 'matrices', 'dadagp_r1_silence.npz')
 
 # Load the inhibition matrix
 matrix = load_inhibition_matrix(save_path)
