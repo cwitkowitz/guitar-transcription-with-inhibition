@@ -11,7 +11,6 @@ import numpy as np
 import guitarpro
 import os
 
-# TODO - add to a constants.py?
 VALID_GP_EXTS = ['.gp3', '.gp4', '.gp5']
 INVALID_EXTS = ['.pygp', '.gp2tokens2gp']
 COPY_TAG = ' copy'
@@ -60,15 +59,7 @@ def get_valid_files(base_dir, ignore_duplicates=True):
 
             # Loop through copies in the directory
             for f in copied_files:
-                # Determine the name of the original file
-                f_name, ext = os.path.splitext(f)[0][:-len(COPY_TAG)], os.path.splitext(f)[-1]
-                # Construct paths to the copy and original
-                copy_path = os.path.join(dir_path, f)
-                orig_path = os.path.join(dir_path, f_name + ext)
-
-                # Remove copies if they have the same file size
-                # TODO - should we make this specification?
-                # if os.path.getsize(copy_path) == os.path.getsize(orig_path):
+                # Remove copies
                 valid_files.remove(f)
 
             # Create a copy of the valid files to iterate through
@@ -126,13 +117,11 @@ def guitarpro_to_jams(gpro_path, jams_dir):
             if np.sum([len(stacked_notes[key][0]) for key in stacked_notes.keys()]):
                 # Write the JAMS files if it is not completely silent
                 tools.write_stacked_notes_jams(stacked_notes, jams_path)
-                # TODO - dealing with negative duration?
 
 
 if __name__ == '__main__':
     # Construct a path to the base directory
-    #base_dir = 'path/to/DadaGP'
-    base_dir = os.path.join(tools.HOME, 'Desktop', 'Datasets', 'DadaGP')
+    base_dir = 'path/to/DadaGP'
 
     # Search the specified path for GuitarPro files
     tracked_files, tracked_paths = get_valid_files(base_dir)
@@ -142,23 +131,6 @@ if __name__ == '__main__':
 
     # Loop through the tracked GuitarPro files
     for k, gpro_file in enumerate(tracked_files):
-        # TODO - remove
-        # Testing files
-        #if not ('Suck My Kiss' in gpro_file):
-        #if not ('Pink Floyd - If' in gpro_file): # Standard
-        #if not ('Nothing else matters (7)' in gpro_file): # Tempo changes and different meters
-        #if not ('Prewar - Song Of War.gp3' in gpro_file): # Repeats + alternate repeats
-        #if not ('Marley, Bob - Stir It Up.gp5' in gpro_file): # Note duration != 0 (Staccato?)
-        #if not ('Danzig - Twist Of Cain.gp4' in gpro_file): # Tempo changes with duration and ties with wrong frets
-        #if not ('Delgadillo, Fernando - De Las Tardes.gp3' in gpro_file): # (lots of) Tempo changes with duration
-        #if not ('Pujol, Emilio - El Abejorro.gp5' in gpro_file): # Notes in voice 1
-        #    continue
-        # Error files
-        #if not ('Pillows (The) - Funny Bunny.gp4' in gpro_file): # No open repeat (measure 0 implied)
-        #if not ('Perkins, Carl - Matchbox.gp4' in gpro_file): # Repeat alternative corner case
-        #if not ('Mclaughlin, John - Waltz For Bill Evans.gp4' in gpro_file): # Negative duration (tempo change not as first beat of measure)
-        #    continue
-
         print(f'Processing track \'{gpro_file}\'...')
 
         # Construct a path to the GuitarPro file

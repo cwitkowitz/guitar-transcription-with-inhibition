@@ -182,8 +182,7 @@ class NoteTracker(object):
             last_gpro_note = self.stacked_gpro_notes[key][-1] \
                              if len(self.stacked_gpro_notes[key]) else None
             # Determine if the last note should be extended
-            if last_gpro_note is not None and \
-               note.fret == last_gpro_note.fret: # TODO - keep this case?
+            if last_gpro_note is not None:
                 # Determine how much to extend the note
                 new_duration = onset - last_gpro_note.onset + duration
                 # Extend the previous note by the current beat's duration
