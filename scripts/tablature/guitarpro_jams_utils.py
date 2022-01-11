@@ -183,7 +183,7 @@ class NoteTracker(object):
                              if len(self.stacked_gpro_notes[key]) else None
             # Determine if the last note should be extended
             if last_gpro_note is not None and \
-               note.fret == last_gpro_note.fret:
+               note.fret == last_gpro_note.fret: # TODO - keep this case?
                 # Determine how much to extend the note
                 new_duration = onset - last_gpro_note.onset + duration
                 # Extend the previous note by the current beat's duration
@@ -299,9 +299,6 @@ def extract_stacked_notes_gpro_track(gpro_track, default_tempo):
     # Initialize a counter to keep track of how many times a repeat was obeyed
     repeat_count = 0
 
-    # Countdown for temporary tempo changes
-    tempo_change_duration = None
-
     # Loop through the track's measures
     while current_measure < total_num_measures:
         # Process the current measure
@@ -320,18 +317,6 @@ def extract_stacked_notes_gpro_track(gpro_track, default_tempo):
                 # Jump past the repeat
                 current_measure = next_jump
                 continue
-
-        if tempo_change_duration is not None:
-            # Decrement the tempo change countdown by one measure
-            tempo_change_duration -= 1
-
-            if tempo_change_duration <= 0:
-                # TODO - remove the print statement
-                print('I don\'t think this will ever happen!!!!')
-                # Reset the tempo of the note tracker to default
-                #note_tracker.set_current_tempo()
-                # Turn off tempo change duration tracking
-                tempo_change_duration = None
 
         if measure.isRepeatOpen:
             # Jump back to this measure at the next repeat close
@@ -356,13 +341,6 @@ def extract_stacked_notes_gpro_track(gpro_track, default_tempo):
                         new_tempo = beat.effect.mixTableChange.tempo.value
                         # Update the tempo of the note tracker
                         note_tracker.set_current_tempo(new_tempo)
-
-                        if beat.effect.mixTableChange.tempo.duration == 0:
-                            # Turn off tempo change duration tracking
-                            tempo_change_duration = None
-                        else:
-                            # Set the number of measures to countdown
-                            tempo_change_duration = beat.effect.mixTableChange.tempo.duration
 
                 # Convert the note duration from ticks to seconds
                 duration_seconds = ticks_to_seconds(beat.duration.time, note_tracker.get_current_tempo())

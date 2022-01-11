@@ -149,14 +149,15 @@ if __name__ == '__main__':
         #if not ('Nothing else matters (7)' in gpro_file): # Tempo changes and different meters
         #if not ('Prewar - Song Of War.gp3' in gpro_file): # Repeats + alternate repeats
         #if not ('Marley, Bob - Stir It Up.gp5' in gpro_file): # Note duration != 0 (Staccato?)
-        if (not 'Danzig - Twist Of Cain.gp4' in gpro_file): # Tempo changes with duration
+        #if not ('Danzig - Twist Of Cain.gp4' in gpro_file): # Tempo changes with duration and ties with wrong frets
+        #if not ('Delgadillo, Fernando - De Las Tardes.gp3' in gpro_file): # (lots of) Tempo changes with duration
         #if not ('Pujol, Emilio - El Abejorro.gp5' in gpro_file): # Notes in voice 1
         #    continue
         # Error files
         #if not ('Pillows (The) - Funny Bunny.gp4' in gpro_file): # No open repeat (measure 0 implied)
         #if not ('Perkins, Carl - Matchbox.gp4' in gpro_file): # Repeat alternative corner case
         #if not ('Mclaughlin, John - Waltz For Bill Evans.gp4' in gpro_file): # Negative duration (tempo change not as first beat of measure)
-            continue
+        #    continue
 
         print(f'Processing track \'{gpro_file}\'...')
 
