@@ -254,3 +254,184 @@ class RecConvClassicEstimator(ClassicTablatureEstimator):
         output = super().forward(embeddings)
 
         return output
+
+
+class BasicConv(ClassicTablatureEstimator):
+    """
+    """
+    def __init__(self, profile, model_complexity=1, device='cpu'):
+
+        # Scale the number of channels by the model complexity
+        num_channels = 16 * 2 ** (model_complexity - 1)
+
+        # Determine the dimensionality of the multipitch "features"
+        symbolic_dim_in = profile.get_range_len()
+
+        # Define the 1D convolutional kernel size (should be long enough to span most intervals)
+        kernel_size = 13
+
+        # Kernel size for max pooling
+        max_size = 2
+
+        # Define the dropout rate for the second convolutional layer
+        dropout = 0.1
+
+        # Calculate the embedding size (output of the convolutional layer)
+        embedding_size = 736#(num_channels // 2) * ceil(symbolic_dim_in / max_size)
+
+        # Call the ClassicTablatureEstimator constructor
+        super().__init__(dim_in=embedding_size, profile=profile, device=device)
+
+        # Determine the padding amount on both sides
+        self.padding = (kernel_size // 2, kernel_size // 2 - (1 - kernel_size % 2))
+
+        """
+        # First 1D convolutional layer
+        self.layer1 = torch.nn.Sequential(
+            # 1st convolution
+            torch.nn.Conv1d(1, num_channels, kernel_size),
+            # 1st batch normalization
+            torch.nn.BatchNorm1d(num_channels),
+            # Activation function
+            torch.nn.ReLU()
+        )"""
+
+        # Second 1D convolutional layer
+        self.layer1 = torch.nn.Sequential(
+            # 2nd convolution
+            torch.nn.Conv1d(1, num_channels, kernel_size),
+            # 2nd batch normalization
+            #torch.nn.BatchNorm1d(num_channels),
+            # Pad for the extra activation
+            #torch.nn.ConstantPad1d((0, symbolic_dim_in % 2), 0),
+            # Activation function
+            torch.nn.ReLU(),
+            # 1st reduction
+            #torch.nn.MaxPool1d(max_size),
+            # 1st dropout
+            torch.nn.Dropout(dropout)
+        )
+
+        # Second 1D convolutional layer
+        self.layer2 = torch.nn.Sequential(
+            # 2nd convolution
+            torch.nn.Conv1d(num_channels, num_channels // 2, 3),
+            # 2nd batch normalization
+            #torch.nn.BatchNorm1d(num_channels // 2),
+            # Pad for the extra activation
+            #torch.nn.ConstantPad1d((0, symbolic_dim_in % 2), 0),
+            # Activation function
+            torch.nn.ReLU(),
+            # 1st reduction
+            torch.nn.MaxPool1d(max_size),
+            # 1st dropout
+            torch.nn.Dropout(dropout)
+        )
+
+    def forward(self, multipitch):
+        """
+        """
+
+        # Obtain the sizes of each dimension
+        B, T, F = multipitch.size()
+
+        # Collapse the frame dimension into the batch dimension, add a channel dimension, and covert to float32
+        multipitch = multipitch.reshape(-1, 1, F).float()
+
+        # Pad the multipitch so that convolution produces the same number of features per channel
+        multipitch = torch.nn.functional.pad(multipitch, self.padding)
+
+        # Run the multipitch through the first convolutional layer
+        embeddings = self.layer1(multipitch)
+
+        # Pad the embeddings a second time
+        embeddings = torch.nn.functional.pad(embeddings, (1, 1))
+
+        # Run the multipitch through the second convolutional layer
+        embeddings = self.layer2(embeddings)
+
+        # Un-collapse the frame dimension
+        embeddings = embeddings.reshape(B, T, -1)
+
+        # Run the embeddings through the output layer
+        output = super().forward(embeddings)
+
+        return output
+
+
+class BasicTransformer(ClassicTablatureEstimator):
+    """
+    """
+    def __init__(self, profile, model_complexity=1, device='cpu'):
+
+        # Scale the number of channels by the model complexity
+        num_channels = 16 * 2 ** (model_complexity - 1)
+
+        # Determine the dimensionality of the multipitch "features"
+        symbolic_dim_in = profile.get_range_len()
+
+        # Define the 1D convolutional kernel size (should be long enough to span most intervals)
+        kernel_size = 13
+
+        # Kernel size for max pooling
+        max_size = 2
+
+        # Calculate the embedding size (output of the convolutional layer)
+        embedding_size = num_channels * ceil(symbolic_dim_in / max_size)
+
+        # Call the ClassicTablatureEstimator constructor
+        super().__init__(dim_in=embedding_size, profile=profile, device=device)
+
+        # Determine the padding amount on both sides
+        self.padding = (kernel_size // 2, kernel_size // 2 - (1 - kernel_size % 2))
+
+        # Second 1D convolutional layer
+        self.layer1 = torch.nn.Sequential(
+            # 2nd convolution
+            torch.nn.Conv1d(1, num_channels, kernel_size),
+            # 2nd batch normalization
+            torch.nn.BatchNorm1d(num_channels),
+            # Pad for the extra activation
+            torch.nn.ConstantPad1d((0, symbolic_dim_in % 2), 0),
+            # Activation function
+            torch.nn.ReLU(),
+            # 1st reduction
+            torch.nn.MaxPool1d(max_size),
+            # 1st dropout
+            #torch.nn.Dropout(dropout)
+        )
+
+        encoder_layer = torch.nn.TransformerEncoderLayer(d_model=embedding_size, nhead=8, batch_first=True)
+        self.encoder = torch.nn.TransformerEncoder(encoder_layer, num_layers=3)
+
+    def forward(self, multipitch):
+        """
+        """
+
+        # Obtain the sizes of each dimension
+        B, T, F = multipitch.size()
+
+        # Collapse the frame dimension into the batch dimension, add a channel dimension, and covert to float32
+        multipitch = multipitch.reshape(-1, 1, F).float()
+
+        # Pad the multipitch so that convolution produces the same number of features per channel
+        multipitch = torch.nn.functional.pad(multipitch, self.padding)
+
+        # Run the multipitch through the first convolutional layer
+        embeddings = self.layer1(multipitch)
+
+        # Pad the embeddings a second time
+        #embeddings = torch.nn.functional.pad(embeddings, self.padding)
+
+        # Run the multipitch through the second convolutional layer
+        #embeddings = self.layer2(embeddings)
+
+        # Un-collapse the frame dimension
+        embeddings = embeddings.reshape(B, T, -1)
+
+        embeddings = self.encoder(embeddings)
+
+        # Run the embeddings through the output layer
+        output = super().forward(embeddings)
+
+        return output
