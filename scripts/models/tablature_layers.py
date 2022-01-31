@@ -250,15 +250,10 @@ class LogisticTablatureEstimator(TablatureEstimator):
 
         if matrix_path is None:
             # Default the inhibition matrix if it does not exist (inhibit string groups)
-            inhibition_matrix = self.initialize_default_matrix(self.profile, self.silence_activations)
+            self.inhibition_matrix = self.initialize_default_matrix(self.profile, self.silence_activations).to(self.device)
         else:
-            # Load the inhibition matrix at the given path
-            inhibition_matrix = load_inhibition_matrix(matrix_path)
-            # Trim the inhibition matrix to match the chosen profile
-            inhibition_matrix = torch.Tensor(trim_inhibition_matrix(inhibition_matrix, num_strings, num_pitches, self.silence_activations))
-
-        # Initialize the inhibition matrix and add it to the specified device
-        self.inhibition_matrix = inhibition_matrix.to(self.device)
+            # Load the inhibition matrix at the specified path
+            self.set_inhibition_matrix(matrix_path)
 
     @staticmethod
     def initialize_default_matrix(profile, silence_activations):
@@ -300,6 +295,28 @@ class LogisticTablatureEstimator(TablatureEstimator):
         inhibition_matrix = inhibition_matrix - torch.eye(dim_out)
 
         return inhibition_matrix
+
+    def set_inhibition_matrix(self, matrix_path):
+        """
+        Load a new inhibition matrix and save it to the model.
+
+        Parameters
+        ----------
+        matrix_path : str or None (optional)
+          Path to inhibition matrix
+        """
+
+        # Extract tablature parameters
+        num_strings = self.profile.get_num_dofs()
+        num_pitches = self.profile.num_pitches
+
+        # Load the inhibition matrix at the given path
+        inhibition_matrix = load_inhibition_matrix(matrix_path)
+        # Trim the inhibition matrix to match the chosen profile
+        inhibition_matrix = torch.Tensor(trim_inhibition_matrix(inhibition_matrix, num_strings, num_pitches, self.silence_activations))
+
+        # Initialize the inhibition matrix and add it to the specified device
+        self.inhibition_matrix = inhibition_matrix.to(self.device)
 
     def pre_proc(self, batch):
         """
@@ -424,46 +441,75 @@ class LogisticTablatureEstimator(TablatureEstimator):
             loss[tools.KEY_LOSS_TOTAL] = total_loss
             output[tools.KEY_LOSS] = loss
 
-        """
+        """"""
         # TODO - verify it still works with silence activations
         # 6th-order greedy choice algorithm
+        # Determine the dimensions of the tablature predictions
+        B, T, A = tablature_est.size()
+        # Obtain the instrument profile parameters
         num_strings = self.profile.get_num_dofs()
         num_classes = self.profile.num_pitches + int(self.silence_activations)
-        B, T, A = tablature_est.size()
 
-        #correlation = (1 - self.weights).unsqueeze(0).unsqueeze(0).to(tablature_est.device)
-        correlation = torch.tile((1 - self.inhibition_matrix), (B, T, 1, 1)).to(tablature_est.device)
+        # Repeat the inhibition matrix across the batch and frame dimension
+        repeat_correlation = (1 - self.inhibition_matrix).repeat(B, T, 1, 1).to(tablature_est.device)
+
+        # Compute the complement of the inhibition matrix and add a batch and frame dimension
+        #correlation = (1 - self.inhibition_matrix).unsqueeze(0).unsqueeze(0)
+        # Expand the inhibition matrix across the batch and frame dimension
+        #expand_correlation = correlation.expand(B, T, -1, -1).to(tablature_est.device)
+
+        #original_correlation = expand_correlation.clone()
+
+        #tile_correlation = torch.Tensor(np.tile(correlation.cpu().detach().numpy(), (B, T, 1, 1))).to(tablature_est.device)
+
+        # Loop through the strings
         for i in range(num_strings):
-            likelihood = torch.mul(tablature_est.unsqueeze(-2), correlation)
-            #likelihood = likelihood.view(B, T, A, num_strings, num_classes)
+            # Take the product of the activations and the correlation
+            likelihood = torch.mul(tablature_est.unsqueeze(-2), repeat_correlation)
 
+            # Sum the likelihood for each activation
             best_combo_score = torch.sum(likelihood, dim=-1)
+            # Choose the activations with the highest score
             best_combo_idx = torch.argmax(best_combo_score, dim=-1)
+
+            # Expand the chosen activation along the activation dimension
             best_combo_idx = best_combo_idx.unsqueeze(-1).repeat((1, 1, A))
+            # Determine the string associated with the chosen activations
             best_combo_str = best_combo_idx // num_classes
 
+            # Determine the lower bound activation for the string
             zero_idcs_str = num_classes * best_combo_str
+            # Determine the upper bound activation for the string
             zero_idcs_stp = zero_idcs_str + num_classes
 
-            tablature_idcs = torch.tile(torch.arange(A), (B, T, 1)).to(tablature_est.device)
-            gt_idcs = tablature_idcs >= zero_idcs_str
-            lt_idcs = tablature_idcs < zero_idcs_stp
-            non_max_idx = torch.logical_not(tablature_idcs == best_combo_idx)
+            # Construct a tensor to hold the indices of the activations
+            activation_idcs = torch.arange(A).unsqueeze(0).unsqueeze(0).repeat((B, T, 1)).to(tablature_est.device)
 
-            zero_string_rows = torch.logical_and(gt_idcs, lt_idcs)
-            zero_non_max_rows = torch.logical_and(zero_string_rows, non_max_idx)
+            # Determine which indices are above and below the range of the current string
+            gt_idcs = activation_idcs >= zero_idcs_str
+            lt_idcs = activation_idcs < zero_idcs_stp
 
-            tablature_est[zero_non_max_rows] = 0
-            correlation[zero_string_rows] = 0
-        """
+            # Take an intersection to obtain within-range indices
+            within_string_rows = torch.logical_and(gt_idcs, lt_idcs)
 
+            # Remove the chosen activation from the rows to zero
+            non_max_idx = torch.logical_not(activation_idcs == best_combo_idx)
+
+            # Create an intersection between the two groups of indices
+            within_string_non_max_rows = torch.logical_and(within_string_rows, non_max_idx)
+
+            # Zero out all activations within the string besides the greedy choice
+            tablature_est[within_string_non_max_rows] = 0
+
+            # Zero out the rows of the entire string in the correlation matrix
+            repeat_correlation[within_string_rows] = 0
         """"""
+
         # Transpose the frame and string/fret combination dimension
         tablature_est = tablature_est.transpose(-2, -1)
 
         # Take the argmax per string for the final predictions
-        tablature_est = tools.logistic_to_tablature(tablature_est, self.profile, self.silence_activations, silence_thr=0.25)
-        """"""
+        tablature_est = tools.logistic_to_tablature(tablature_est, self.profile, self.silence_activations)
 
         # Finalize tablature estimation
         output[tools.KEY_TABLATURE] = tablature_est

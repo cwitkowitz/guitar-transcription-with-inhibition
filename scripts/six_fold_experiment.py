@@ -13,6 +13,7 @@ import amt_tools.tools as tools
 
 from inhibition.inhibition_matrix import InhibitionMatrixTrainer, plot_inhibition_matrix
 from models.tabcnn_variants import TabCNN, TabCNNLogistic, TabCNNRecurrent
+from evaluation.metrics import TablatureEvaluator
 from statistics import compute_balanced_class_weighting
 from visualize import plot_logistic_activations
 
@@ -26,7 +27,7 @@ import matplotlib.pyplot as plt
 import torch
 import os
 
-EX_NAME = '_'.join(['GT', 'Logistic', 'strings', 'params3', 'rec', 'long'])
+EX_NAME = '_'.join(['delmeate'])
 
 ex = Experiment('TabCNN w/ Tablature Estimation on GuitarSet w/ 6-fold Cross Validation')
 
@@ -43,10 +44,10 @@ def config():
     num_frames = 125
 
     # Number of training iterations to conduct
-    iterations = 200000
+    iterations = 50000
 
     # How many equally spaced save/validation checkpoints - 0 to disable
-    checkpoints = 400
+    checkpoints = 5000
 
     # Number of samples to gather for a batch
     batch_size = 50
@@ -68,9 +69,9 @@ def config():
     seed = 0
 
     # Create the root directory for the experiment to hold train/transcribe/evaluate materials
-    #root_dir = os.path.join('..', 'generated', 'experiments', EX_NAME)
+    root_dir = os.path.join('..', 'generated', 'experiments', EX_NAME)
     #root_dir = os.path.join('/', 'home', 'rockstar', 'Desktop', 'guitar-transcription-experiments-final', EX_NAME)
-    root_dir = os.path.join('/', 'storage', 'frank', EX_NAME)
+    #root_dir = os.path.join('/', 'storage', 'frank', EX_NAME)
     os.makedirs(root_dir, exist_ok=True)
 
     # Add a file storage observer for the log directory
@@ -101,16 +102,17 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
     validation_evaluator = ComboEvaluator([LossWrapper(),
                                            MultipitchEvaluator(),
                                            TablatureEvaluator(profile=profile),
+                                           TablatureEvaluator(profile=profile),
                                            SoftmaxAccuracy(key=tools.KEY_TABLATURE)])
 
     # Base directories
     #gset_bsdir = os.path.join('/', 'mnt', 'bigstorage', 'data', 'GuitarSet')
-    gset_bsdir = os.path.join('/', 'storage', 'frank', 'GuitarSet')
+    #gset_bsdir = os.path.join('/', 'storage', 'frank', 'GuitarSet')
 
     # Keep all cached data/features here
     #gset_cache = os.path.join(gset_bsdir, 'precomputed')
-    #gset_cache = os.path.join('..', 'generated', 'data')
-    gset_cache = os.path.join('/', 'storageNVME', 'frank')
+    gset_cache = os.path.join('..', 'generated', 'data')
+    #gset_cache = os.path.join('/', 'storageNVME', 'frank')
 
     # Get a list of the GuitarSet splits
     splits = GuitarSet.available_splits()
@@ -144,8 +146,8 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
         print('Loading training partition...')
 
         # Create a dataset corresponding to the training partition
-        #gset_train = GuitarSet(base_dir=None,
-        gset_train = GuitarSet(base_dir=gset_bsdir,
+        gset_train = GuitarSet(base_dir=None,
+        #gset_train = GuitarSet(base_dir=gset_bsdir,
                                splits=train_splits,
                                hop_length=hop_length,
                                sample_rate=sample_rate,
@@ -165,8 +167,8 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
         print(f'Loading testing partition (player {test_hold_out})...')
 
         # Create a dataset corresponding to the testing partition
-        #gset_test = GuitarSet(base_dir=None,
-        gset_test = GuitarSet(base_dir=gset_bsdir,
+        gset_test = GuitarSet(base_dir=None,
+        #gset_test = GuitarSet(base_dir=gset_bsdir,
                               splits=test_splits,
                               hop_length=hop_length,
                               sample_rate=sample_rate,
@@ -180,8 +182,8 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
             print(f'Loading validation partition (player {val_hold_out})...')
 
             # Create a dataset corresponding to the validation partition
-            #gset_val = GuitarSet(base_dir=None,
-            gset_val = GuitarSet(base_dir=gset_bsdir,
+            gset_val = GuitarSet(base_dir=None,
+            #gset_val = GuitarSet(base_dir=gset_bsdir,
                                  splits=val_splits,
                                  hop_length=hop_length,
                                  sample_rate=sample_rate,
@@ -196,14 +198,14 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
 
         print('Initializing model...')
 
-        #matrix_path = os.path.join('..', 'generated', 'matrices', f'dadagp_r1_silence_p100.npz')
+        matrix_path = os.path.join('..', 'generated', 'matrices', f'dadagp_r1_silence_p64.npz')
 
         # Initialize a new instance of the model
         tabcnn = TabCNNLogistic(dim_in=dim_in,
                                 profile=profile,
                                 in_channels=data_proc.get_num_channels(),
                                 model_complexity=model_complexity,
-                                #matrix_path=matrix_path,
+                                matrix_path=matrix_path,
                                 silence_activations=True,
                                 device=gpu_id)
         #tabcnn = TabCNNRecurrent(dim_in=dim_in,
