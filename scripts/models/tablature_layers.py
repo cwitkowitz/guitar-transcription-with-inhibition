@@ -441,7 +441,7 @@ class LogisticTablatureEstimator(TablatureEstimator):
             loss[tools.KEY_LOSS_TOTAL] = total_loss
             output[tools.KEY_LOSS] = loss
 
-        """"""
+        """
         # TODO - verify it still works with silence activations
         # 6th-order greedy choice algorithm
         # Determine the dimensions of the tablature predictions
@@ -451,26 +451,17 @@ class LogisticTablatureEstimator(TablatureEstimator):
         num_classes = self.profile.num_pitches + int(self.silence_activations)
 
         # Repeat the inhibition matrix across the batch and frame dimension
-        repeat_correlation = (1 - self.inhibition_matrix).repeat(B, T, 1, 1).to(tablature_est.device)
-
-        # Compute the complement of the inhibition matrix and add a batch and frame dimension
-        #correlation = (1 - self.inhibition_matrix).unsqueeze(0).unsqueeze(0)
-        # Expand the inhibition matrix across the batch and frame dimension
-        #expand_correlation = correlation.expand(B, T, -1, -1).to(tablature_est.device)
-
-        #original_correlation = expand_correlation.clone()
-
-        #tile_correlation = torch.Tensor(np.tile(correlation.cpu().detach().numpy(), (B, T, 1, 1))).to(tablature_est.device)
+        repeat_inhibition = self.inhibition_matrix.repeat(B, T, 1, 1).to(tablature_est.device)
 
         # Loop through the strings
         for i in range(num_strings):
-            # Take the product of the activations and the correlation
-            likelihood = torch.mul(tablature_est.unsqueeze(-2), repeat_correlation)
+            # Take the product of the activations and the inhibition
+            cost = torch.mul(tablature_est.unsqueeze(-2), repeat_inhibition)
 
-            # Sum the likelihood for each activation
-            best_combo_score = torch.sum(likelihood, dim=-1)
-            # Choose the activations with the highest score
-            best_combo_idx = torch.argmax(best_combo_score, dim=-1)
+            # Sum the cost for each activation
+            best_combo_score = torch.sum(cost, dim=-1)
+            # Choose the activations with the lowest score
+            best_combo_idx = torch.argmin(best_combo_score, dim=-1)
 
             # Expand the chosen activation along the activation dimension
             best_combo_idx = best_combo_idx.unsqueeze(-1).repeat((1, 1, A))
@@ -502,8 +493,8 @@ class LogisticTablatureEstimator(TablatureEstimator):
             tablature_est[within_string_non_max_rows] = 0
 
             # Zero out the rows of the entire string in the correlation matrix
-            repeat_correlation[within_string_rows] = 0
-        """"""
+            repeat_inhibition[within_string_rows] = 0
+        """
 
         # Transpose the frame and string/fret combination dimension
         tablature_est = tablature_est.transpose(-2, -1)
