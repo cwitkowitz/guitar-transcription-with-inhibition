@@ -15,6 +15,8 @@ NOTE_TYPE_ENUM_NORMAL  = 'normal'
 NOTE_TYPE_ENUM_TIE     = 'tie'
 NOTE_TYPE_ENUM_DEAD    = 'dead'
 
+# TODO - some files have very weird fingerings (e.g. Bruel, Patrick - Mon Amant De Saint-Jean) (right-hand technique?)
+
 
 def ticks_to_seconds(ticks, tempo):
     """
@@ -163,7 +165,13 @@ class NoteTracker(object):
         # Extraction all relevant note information
         string_idx, fret, type = gpro_note.string - 1, gpro_note.value, gpro_note.type.name
 
-        # TODO - determine how to deal with letRing, staccato, and other NoteEffects
+        # TODO - determine how to deal with these (and other) NoteEffects
+        if gpro_note.effect.ghostNote:
+            pass
+        if gpro_note.effect.letRing:
+            pass
+        if gpro_note.effect.staccato:
+            pass
 
         # Scale the duration by the duration percentage
         duration *= gpro_note.durationPercent

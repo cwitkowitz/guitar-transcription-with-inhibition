@@ -15,6 +15,12 @@ VALID_GP_EXTS = ['.gp3', '.gp4', '.gp5']
 INVALID_EXTS = ['.pygp', '.gp2tokens2gp']
 COPY_TAG = ' copy'
 
+# TODO - there are still some ways for duplicates to get in
+#      - e.g., very similar but not quite exact names
+#      - e.g., alternate version in another directory (ex: Jeopardy.gp3/4)
+#      - (n) tags when alternate version already exists (it doesn't always)
+#        - could this be true for the "copy" tag as well?
+
 
 def get_valid_files(base_dir, ignore_duplicates=True):
     """
