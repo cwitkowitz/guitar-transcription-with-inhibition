@@ -3,7 +3,7 @@ from amt_tools.models import TabCNN, LanguageModel, LogisticBank
 
 import amt_tools.tools as tools
 
-from .tablature_layers import ClassicTablatureEstimator, LogisticTablatureEstimator
+from .tablature_layers import TablatureEstimator, ClassicTablatureEstimator, LogisticTablatureEstimator
 
 # Regular imports
 from copy import deepcopy
@@ -57,6 +57,21 @@ class TabCNNLogistic(TabCNNRecurrent):
 
         # Replace the tablature layer with a logistic tablature estimator
         self.dense[-1] = LogisticTablatureEstimator(128, profile, matrix_path, silence_activations, device)
+
+    def change_device(self, device=None):
+        """
+        Change the device and load the model onto the new device.
+
+        Parameters
+        ----------
+        device : string, int or None, optional (default None)
+          Device to load model onto
+        """
+
+        super().change_device(device)
+
+        # Update the tracked device of the tablature layer
+        self.dense[-1].change_device(device)
 
     def pre_proc(self, batch):
         """
@@ -277,6 +292,22 @@ class TabCNNJointCustom(TabCNNMultipitch):
         """
 
         self.tablature_layer = tablature_layer
+
+    def change_device(self, device=None):
+        """
+        Change the device and load the model onto the new device.
+
+        Parameters
+        ----------
+        device : string, int or None, optional (default None)
+          Device to load model onto
+        """
+
+        super().change_device(device)
+
+        if self.tablature_layer is not None:
+            # Update the tracked device of the tablature layer
+            self.tablature_layer.change_device(device)
 
     def forward(self, feats):
         """

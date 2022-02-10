@@ -3,15 +3,18 @@
 # My imports
 from amt_tools.evaluate import TablatureEvaluator
 
+import amt_tools.tools as tools
+
 # Regular imports
 import numpy as np
 
+KEY_FA_ERRORS = 'false_alarm_errors'
 KEY_DP_ERRORS = 'duplicate_pitch_errors'
 
 
-class DuplicatePitchError(TablatureEvaluator):
+class FalseAlarmErrors(TablatureEvaluator):
     """
-    Implements an evaluator for counting the number of duplicate pitch predictions.
+    Implements an evaluator for counting the number of false alarm errors.
     """
 
     def __init__(self, profile, key=None, save_dir=None, patterns=None, verbose=False):
@@ -46,6 +49,13 @@ class DuplicatePitchError(TablatureEvaluator):
           Dictionary containing number of duplicate pitch errors
         """
 
+        # Treat the stacked multi pitch arrays as logistic activations
+        logistic_est = tools.stacked_multi_pitch_to_logistic(estimated, self.profile, True)
+        logistic_ref = tools.stacked_multi_pitch_to_logistic(reference, self.profile, True)
+
+        # Compute the number of false alarm errors
+        false_alarm_errors = np.sum(np.logical_and(logistic_est, np.logical_not(logistic_ref)))
+
         # Collapse the stack by summation
         multipitch_est = np.sum(estimated, axis=-3)
         multipitch_ref = np.sum(reference, axis=-3)
@@ -65,6 +75,7 @@ class DuplicatePitchError(TablatureEvaluator):
 
         # Package the result into a dictionary
         results = {
+            KEY_FA_ERRORS : false_alarm_errors,
             KEY_DP_ERRORS : duplicate_pitch_errors
         }
 

@@ -1,9 +1,10 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
+from .augment_tablature import random_notes_drop, random_capo_move, random_onset_offset_shift
 from amt_tools.datasets import TranscriptionDataset
 
-from .augment_tablature import *
+import amt_tools.tools as tools
 
 # Regular imports
 from copy import deepcopy

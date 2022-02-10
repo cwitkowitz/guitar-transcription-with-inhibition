@@ -1,18 +1,17 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
+from inhibition_matrix import InhibitionMatrixTrainer
+from tablature.GuitarSetTabs import GuitarSetTabs
 from amt_tools.features import CQT
 
 import amt_tools.tools as tools
 
-from inhibition_matrix import InhibitionMatrixTrainer
-from tablature.GuitarSetTabs import GuitarSetTabs
-
 # Regular imports
 import os
 
-# Select z for taking the zth-root
-z = 1
+# Select the power for boosting
+boost = 1
 
 # Number of samples per second of audio
 sample_rate = 22050
@@ -48,7 +47,7 @@ for k in range(6):
     train_splits.remove(val_hold_out)
 
     # Construct a path for saving the inhibition matrix
-    save_path = os.path.join('..', '..', 'generated', 'matrices', f'guitarset_{test_hold_out}_no_aug_r{z}.npz')
+    save_path = os.path.join('..', '..', 'generated', 'matrices', f'guitarset_{test_hold_out}_silence_p{boost}.npz')
 
     # Create a dataset using all of the GuitarSet tablature data, excluding the holdout fold
     gset_train = GuitarSetTabs(base_dir=None,
@@ -63,4 +62,4 @@ for k in range(6):
                                augment_notes=False)
 
     # Obtain an inhibition matrix from the GuitarSet data
-    InhibitionMatrixTrainer(profile, root=z, save_path=save_path).train(gset_train, residual_threshold=None)
+    InhibitionMatrixTrainer(profile, True, boost=boost, save_path=save_path).train(gset_train, residual_threshold=None)

@@ -1,10 +1,11 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
+from models.tabcnn_variants import TabCNNLogistic
+from evaluation.metrics import FalseAlarmErrors
 from amt_tools.datasets import GuitarSet
 from amt_tools.features import CQT
 
-from amt_tools.train import validate
 from amt_tools.transcribe import *
 from amt_tools.evaluate import *
 
@@ -22,6 +23,10 @@ device = torch.device(f'cuda:{gpu_id}' if torch.cuda.is_available() else 'cpu')
 model = torch.load(model_path, map_location=device)
 model.change_device(gpu_id)
 
+if isinstance(model, TabCNNLogistic):
+    matrix_path = os.path.join('path', 'to', 'model')
+    model.dense[-1].set_inhibition_matrix(matrix_path)
+
 profile = model.profile
 
 sample_rate = 22050
@@ -37,8 +42,10 @@ data_proc = CQT(sample_rate=sample_rate,
 validation_estimator = ComboEstimator([TablatureWrapper(profile)])
 
 # Initialize the evaluation pipeline
-validation_evaluator = ComboEvaluator([MultipitchEvaluator(),
+validation_evaluator = ComboEvaluator([LossWrapper(),
+                                       MultipitchEvaluator(),
                                        TablatureEvaluator(profile=profile),
+                                       FalseAlarmErrors(profile=profile),
                                        SoftmaxAccuracy(key=tools.KEY_TABLATURE)])
 
 # Define expected path for calculated features and ground-truth

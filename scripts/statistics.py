@@ -148,7 +148,7 @@ def compute_dataset_inhibition_loss(tablature_dataset, inhibition_matrix, profil
 
     Parameters
     ----------
-    tablature_dataset : SymbolicTablature dataset
+    tablature_dataset : TranscriptionDataset
       Dataset containing symbolic tablature
     profile : TablatureProfile (tools/instrument.py)
       Instructions for organizing tablature into logistic activations

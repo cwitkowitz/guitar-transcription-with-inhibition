@@ -7,7 +7,6 @@ import amt_tools.tools as tools
 from inhibition.inhibition_matrix import load_inhibition_matrix, trim_inhibition_matrix
 
 # Regular imports
-import numpy as np
 import torch
 
 
@@ -217,7 +216,7 @@ class LogisticTablatureEstimator(TablatureEstimator):
     """
     Multi-unit (string/fret) logistic regression tablature layer with pairwise inhibition.
     """
-    def __init__(self, dim_in, profile, matrix_path=None, silence_activations=False, device='cpu'):
+    def __init__(self, dim_in, profile, matrix_path=None, silence_activations=False, lmbda=1, device='cpu'):
         """
         Initialize a LogisticBank tablature layer and the inhibition matrix.
 
@@ -228,6 +227,8 @@ class LogisticTablatureEstimator(TablatureEstimator):
           Path to inhibition matrix
         silence_activations : bool
           Whether to explicitly model silence
+        lmbda : float
+          Multiplier for the inhibition loss
         """
 
         super().__init__(dim_in, profile, device)
@@ -240,6 +241,7 @@ class LogisticTablatureEstimator(TablatureEstimator):
         dim_out = num_strings * num_pitches
 
         self.silence_activations = silence_activations
+        self.lmbda = lmbda
 
         if self.silence_activations:
             # Account for no-string activations
@@ -351,7 +353,7 @@ class LogisticTablatureEstimator(TablatureEstimator):
         return batch
 
     @staticmethod
-    def calculate_inhibition_loss(logistic_tablature, inhibition_matrix):
+    def calculate_inhibition_loss(logistic_tablature, inhibition_matrix, lmbda):
         """
         Calculate the inhibition loss for frame-level logistic
         tablature predictions, given a pre-existing inhibition matrix.
@@ -365,6 +367,8 @@ class LogisticTablatureEstimator(TablatureEstimator):
         inhibition_matrix : ndarray (N x N)
           Matrix of inhibitory weights for string/fret pairs
           N - number of unique string/fret activations
+        lmbda : float
+          Multiplier for the inhibition loss
 
         Returns
         ----------
@@ -388,6 +392,9 @@ class LogisticTablatureEstimator(TablatureEstimator):
 
         # Divide by two, since every pair will have a duplicate entry, and sum across pairs
         inhibition_loss = torch.sum(inhibition_loss / 2)
+
+        # Scale the inhibition loss by the specified multiplier
+        inhibition_loss *= lmbda
 
         return inhibition_loss
 
@@ -427,12 +434,10 @@ class LogisticTablatureEstimator(TablatureEstimator):
         # Determine if loss is being tracked
         if total_loss:
             # Compute the inhibition loss for the estimated tablature
-            inhibition_loss = self.calculate_inhibition_loss(tablature_est, self.inhibition_matrix)
+            inhibition_loss = self.calculate_inhibition_loss(tablature_est, self.inhibition_matrix, self.lmbda)
             # Add the inhibition loss to the tracked loss dictionary
             loss[tools.KEY_LOSS_INH] = inhibition_loss
             # Add the inhibition loss to the total loss
-            # TODO - the following line can be used for annealing
-            # total_loss = (total_loss * (50000 - self.iter) / 50000) + (inhibition_loss * (self.iter / 50000))
             total_loss += inhibition_loss
 
         # Determine if loss is being tracked
@@ -440,61 +445,6 @@ class LogisticTablatureEstimator(TablatureEstimator):
             # Add the loss to the output dictionary
             loss[tools.KEY_LOSS_TOTAL] = total_loss
             output[tools.KEY_LOSS] = loss
-
-        """
-        # TODO - verify it still works with silence activations
-        # 6th-order greedy choice algorithm
-        # Determine the dimensions of the tablature predictions
-        B, T, A = tablature_est.size()
-        # Obtain the instrument profile parameters
-        num_strings = self.profile.get_num_dofs()
-        num_classes = self.profile.num_pitches + int(self.silence_activations)
-
-        # Repeat the inhibition matrix across the batch and frame dimension
-        repeat_inhibition = self.inhibition_matrix.repeat(B, T, 1, 1).to(tablature_est.device)
-
-        # Loop through the strings
-        for i in range(num_strings):
-            # Take the product of the activations and the inhibition
-            cost = torch.mul(tablature_est.unsqueeze(-2), repeat_inhibition)
-
-            # Sum the cost for each activation
-            best_combo_score = torch.sum(cost, dim=-1)
-            # Choose the activations with the lowest score
-            best_combo_idx = torch.argmin(best_combo_score, dim=-1)
-
-            # Expand the chosen activation along the activation dimension
-            best_combo_idx = best_combo_idx.unsqueeze(-1).repeat((1, 1, A))
-            # Determine the string associated with the chosen activations
-            best_combo_str = best_combo_idx // num_classes
-
-            # Determine the lower bound activation for the string
-            zero_idcs_str = num_classes * best_combo_str
-            # Determine the upper bound activation for the string
-            zero_idcs_stp = zero_idcs_str + num_classes
-
-            # Construct a tensor to hold the indices of the activations
-            activation_idcs = torch.arange(A).unsqueeze(0).unsqueeze(0).repeat((B, T, 1)).to(tablature_est.device)
-
-            # Determine which indices are above and below the range of the current string
-            gt_idcs = activation_idcs >= zero_idcs_str
-            lt_idcs = activation_idcs < zero_idcs_stp
-
-            # Take an intersection to obtain within-range indices
-            within_string_rows = torch.logical_and(gt_idcs, lt_idcs)
-
-            # Remove the chosen activation from the rows to zero
-            non_max_idx = torch.logical_not(activation_idcs == best_combo_idx)
-
-            # Create an intersection between the two groups of indices
-            within_string_non_max_rows = torch.logical_and(within_string_rows, non_max_idx)
-
-            # Zero out all activations within the string besides the greedy choice
-            tablature_est[within_string_non_max_rows] = 0
-
-            # Zero out the rows of the entire string in the correlation matrix
-            repeat_inhibition[within_string_rows] = 0
-        """
 
         # Transpose the frame and string/fret combination dimension
         tablature_est = tablature_est.transpose(-2, -1)

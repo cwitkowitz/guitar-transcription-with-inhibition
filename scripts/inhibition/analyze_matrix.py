@@ -1,21 +1,39 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from inhibition_matrix import load_inhibition_matrix, plot_inhibition_matrix
+from inhibition_matrix import load_inhibition_matrix, plot_inhibition_matrix, trim_inhibition_matrix
+
+import amt_tools.tools as tools
 
 # Regular imports
+from matplotlib import rcParams
+
 import matplotlib.pyplot as plt
 import os
 
 # Construct a path for loading the inhibition matrix
-#save_path = os.path.join('path', 'to', 'matrix.npz')
-save_path = os.path.join('..', '..', 'generated', 'matrices', 'dadagp_r1_silence.npz')
+save_path = os.path.join('path', 'to', 'matrix.npz')
 
 # Load the inhibition matrix
 matrix = load_inhibition_matrix(save_path)
+# Initialize the profile
+profile = tools.GuitarProfile(num_frets=19)
+# Determine the number of strings and fret classes
+num_strings = profile.get_num_dofs()
+num_pitches = profile.num_pitches
+
+# Remove excessive frets from the inhibition matrix
+matrix = trim_inhibition_matrix(matrix, num_strings, num_pitches, True)
+
+# Change the font and font size for the plot
+rcParams['font.family'] = 'monospace'
+rcParams['font.size'] = 20
+
+# Initialize a new figure with a large square shape
+fig = plt.figure(figsize=(10, 10), tight_layout=True)
 
 # Plot the inhibition matrix
-_ = plot_inhibition_matrix(matrix)
+_ = plot_inhibition_matrix(matrix, fig=fig)
 
-# Call this to stop execution
+# Call this to pause execution
 plt.show(block=True)

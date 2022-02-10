@@ -123,9 +123,6 @@ def plot_inhibition_matrix(inhibition_matrix, v_bounds=None, include_axes=True, 
         # Plot the inhibition matrix as a heatmap
         ax.imshow(likelihood, extent=[0, num_activations, num_activations, 0], vmin=v_bounds[0], vmax=v_bounds[1])
 
-    # Add a title to the heatmap
-    ax.set_title('Inhibition Matrix')
-
     if include_axes:
         if labels is None:
             # Default the string labels
@@ -153,7 +150,7 @@ class InhibitionMatrixTrainer(object):
     """
     Implements the protocol for generating an inhibition matrix.
     """
-    def __init__(self, profile, silent_string=False, root=5, checkpoint_gap=1000, n_residual=100, save_path=None):
+    def __init__(self, profile, silent_string=False, boost=128, checkpoint_gap=1000, n_residual=100, save_path=None):
         """
         Initialize the internal state for the inhibition matrix training protocol.
 
@@ -163,8 +160,8 @@ class InhibitionMatrixTrainer(object):
           Instructions for organizing tablature into logistic activations
         silent_string : bool
           Whether the silent string is explicitly modeled as an activation
-        root : float
-          Root to use when relaxing inhibition (higher -> weaker inhibition weights)
+        boost : float
+          boost to use when relaxing inhibition (higher -> weaker inhibition weights)
         checkpoint_gap : int
           Number of iterations between save checkpoints
         n_residual : int
@@ -175,7 +172,7 @@ class InhibitionMatrixTrainer(object):
 
         self.profile = profile
         self.silent_string = silent_string
-        self.root = root
+        self.boost = boost
         self.checkpoint_gap = checkpoint_gap
         self.save_path = save_path
 
@@ -273,16 +270,6 @@ class InhibitionMatrixTrainer(object):
         # Transpose the logistic activations
         logistic_activations = np.transpose(logistic_activations)
 
-        #if self.silent_string:
-        #    # Determine which indices in the logistic activations correspond to string silence
-        #    no_string_idcs = (self.profile.num_pitches + 1) * np.arange(self.profile.get_num_dofs())
-        #    # Determine how many strings are inactive at each frame
-        #    num_silent_strings = np.sum(logistic_activations[..., no_string_idcs], axis=-1)
-        #    # Obtain index pairs for silent string activations where more than N=2 strings are silent
-        #    idx_pairs = np.meshgrid(np.where(num_silent_strings > 2)[0], no_string_idcs)
-        #    # Ignore silent string activations unless N or more strings are active
-        #    logistic_activations[idx_pairs[0].flatten(), idx_pairs[1].flatten()] = 0
-
         # Count the number of frames each string/fret occurs in the tablature data
         single_occurrences = np.expand_dims(np.sum(logistic_activations, axis=0), axis=0)
         # Sum the disjoint occurrences for each string/fret pair in the matrix
@@ -307,8 +294,8 @@ class InhibitionMatrixTrainer(object):
         # Calculate weight as the number of co-occurences over the number of unique observations (IoU)
         iteration_weight = co_occurrences[valid_idcs] / unique_occurrences[valid_idcs]
 
-        # Add the (zth-root boosted) weight (within [0, 1]) to the pairwise weights
-        self.pairwise_weights[valid_idcs] += (iteration_weight ** (1 / self.root))
+        # Add the weight (within [0, 1]) to the pairwise weights
+        self.pairwise_weights[valid_idcs] += iteration_weight
 
         # Compute the residual between the current and previous matrix
         residual = np.sum(np.abs(self.compute_current_matrix() - previous_matrix))
@@ -337,7 +324,7 @@ class InhibitionMatrixTrainer(object):
         #   - Hard 0 for no penalty at all (i.e. self-association)
         #   - Hard 1 for impossible combinations (i.e. dual-string)
         #   - Somewhere in between for other correlations
-        inhibition_matrix = 1 - inhibition_matrix
+        inhibition_matrix = (1 - inhibition_matrix) ** self.boost
 
         return inhibition_matrix
 
