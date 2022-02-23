@@ -1,8 +1,8 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from inhibition_matrix import InhibitionMatrixTrainer
-from tablature.GuitarProTabs import DadaGP
+from inhibition_matrix_utils import InhibitionMatrixTrainer
+from datasets.GuitarProTabs import DadaGP
 from amt_tools.features import CQT
 
 import amt_tools.tools as tools
@@ -26,7 +26,7 @@ data_proc = CQT(sample_rate=sample_rate,
                 n_bins=192,
                 bins_per_octave=24)
 
-# Create a dataset using all of the GuitarPro tablature data
+# Create a dataset using all of the GuitarPro datasets data
 gpro_train = DadaGP(base_dir=None,
                     splits=['train', 'val'],
                     hop_length=hop_length,

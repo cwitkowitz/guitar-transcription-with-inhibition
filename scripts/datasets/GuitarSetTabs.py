@@ -18,7 +18,7 @@ class GuitarSetTabs(SymbolicTablature):
 
     def __init__(self, base_dir=None, splits=None, hop_length=512, sample_rate=44100, data_proc=None,
                  profile=None, num_frames=None, split_notes=False, reset_data=False, store_data=True,
-                 save_data=True, save_loc=None, seed=0, max_duration=0, augment_notes=False):
+                 save_data=True, save_loc=None, seed=0, max_duration=0):
         """
         Initialize the dataset and establish parameter defaults in function signature.
 
@@ -33,7 +33,7 @@ class GuitarSetTabs(SymbolicTablature):
             base_dir = os.path.join(tools.DEFAULT_DATASETS_DIR, GuitarSet.dataset_name())
 
         super().__init__(base_dir, splits, hop_length, sample_rate, data_proc, profile, num_frames, split_notes,
-                         reset_data, store_data, save_data, save_loc, seed, max_duration, augment_notes)
+                         reset_data, store_data, save_data, save_loc, seed, max_duration)
 
     def get_tracks(self, split):
         """

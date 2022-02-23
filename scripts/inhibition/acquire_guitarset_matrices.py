@@ -1,8 +1,8 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from inhibition_matrix import InhibitionMatrixTrainer
-from tablature.GuitarSetTabs import GuitarSetTabs
+from inhibition_matrix_utils import InhibitionMatrixTrainer
+from datasets.GuitarSetTabs import GuitarSetTabs
 from amt_tools.features import CQT
 
 import amt_tools.tools as tools
@@ -49,7 +49,7 @@ for k in range(6):
     # Construct a path for saving the inhibition matrix
     save_path = os.path.join('..', '..', 'generated', 'matrices', f'guitarset_{test_hold_out}_silence_p{boost}.npz')
 
-    # Create a dataset using all of the GuitarSet tablature data, excluding the holdout fold
+    # Create a dataset using all of the GuitarSet datasets data, excluding the holdout fold
     gset_train = GuitarSetTabs(base_dir=None,
                                splits=train_splits,
                                hop_length=hop_length,

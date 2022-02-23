@@ -4,7 +4,7 @@
 # My imports
 import amt_tools.tools as tools
 
-from guitarpro_jams_utils import validate_gpro_track, extract_stacked_notes_gpro_track
+from guitarpro_utils import validate_gpro_track, extract_stacked_notes_gpro_track
 
 # Regular imports
 import numpy as np
@@ -110,7 +110,7 @@ def guitarpro_to_jams(gpro_path, jams_dir):
 
     # Loop through the instrument tracks in the GuitarPro data
     for t, gpro_track in enumerate(gpro_data.tracks):
-        # Make sure the GuitarPro file can be processed for symbolic tablature
+        # Make sure the GuitarPro file can be processed for symbolic datasets
         if validate_gpro_track(gpro_track):
             # Add the track number to the file name
             track_name = f'{gpro_file} - {t + 1}'

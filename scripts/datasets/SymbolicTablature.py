@@ -1,7 +1,6 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from .augment_tablature import random_notes_drop, random_capo_move, random_onset_offset_shift
 from amt_tools.datasets import TranscriptionDataset
 
 import amt_tools.tools as tools
@@ -20,7 +19,7 @@ class SymbolicTablature(TranscriptionDataset):
 
     def __init__(self, base_dir=None, splits=None, hop_length=512, sample_rate=44100, data_proc=None,
                  profile=None, num_frames=None, split_notes=False, reset_data=False, store_data=True,
-                 save_data=True, save_loc=None, seed=0, max_duration=0, augment_notes=False):
+                 save_data=True, save_loc=None, seed=0, max_duration=0):
         """
         Initialize the dataset and establish parameter defaults in function signature.
 
@@ -31,12 +30,9 @@ class SymbolicTablature(TranscriptionDataset):
           Maximum duration in minutes a JAMS file can represent. Files longer than this will be randomly
           sliced to fit the maximum. Depending on the amount of RAM available, converting a very long
           duration to frames can cause a crash. Set max_duration=0 to disable, i.e., any duration is fine.
-        augment_notes : bool
-          Whether or not to augment the tablature at the note level
         """
 
         self.max_duration = 60 * max_duration # Convert to seconds
-        self.augment_notes = augment_notes
 
         super().__init__(base_dir, splits, hop_length, sample_rate, data_proc, profile,
                          num_frames, split_notes, reset_data, store_data, save_data, save_loc, seed)
@@ -145,7 +141,7 @@ class SymbolicTablature(TranscriptionDataset):
         data = super().load(track)
 
         # If the track data is being instantiated, it will not have the tablature key
-        if tools.KEY_TABLATURE not in data.keys() or self.augment_notes:
+        if tools.KEY_TABLATURE not in data.keys():
             # Construct the path to the track's JAMS data
             jams_path = self.get_jams_path(track)
 
@@ -169,16 +165,6 @@ class SymbolicTablature(TranscriptionDataset):
             # Load the notes by string from the JAMS file
             stacked_notes = tools.extract_stacked_notes_jams(jam)
 
-            if self.augment_notes:
-                # Randomly drop 10% of notes
-                stacked_notes = random_notes_drop(stacked_notes, 0.1, self.rng)
-                # Perform capo augmentation 50% of the time
-                if self.rng.rand() <= 0.5:
-                    # Place a capo randomly, such that all notes can still be played relative to the capo fret
-                    stacked_notes = random_capo_move(stacked_notes, self.profile, self.rng)
-                # Randomly shift onsets and offsets with a standard deviation of 50 ms
-                stacked_notes = random_onset_offset_shift(stacked_notes, 0.050, self.rng)
-
             # Get the times for the start of each frame
             times = tools.get_frame_times(duration, self.sample_rate, self.hop_length)
 
@@ -195,7 +181,7 @@ class SymbolicTablature(TranscriptionDataset):
             # Add the sampling rate and the hop length to the data
             data[tools.KEY_FS], data[tools.KEY_HOP] = self.sample_rate, self.hop_length
 
-            if self.save_data and not self.augment_notes:
+            if self.save_data:
                 # Get the appropriate path for saving the track data
                 gt_path = self.get_gt_dir(track)
 

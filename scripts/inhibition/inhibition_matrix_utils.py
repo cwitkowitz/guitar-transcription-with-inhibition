@@ -157,7 +157,7 @@ class InhibitionMatrixTrainer(object):
         Parameters
         ----------
         profile : TablatureProfile (tools/instrument.py)
-          Instructions for organizing tablature into logistic activations
+          Instructions for organizing datasets into logistic activations
         silent_string : bool
           Whether the silent string is explicitly modeled as an activation
         boost : float
@@ -197,7 +197,7 @@ class InhibitionMatrixTrainer(object):
         Parameters
         ----------
         tablature_data : SymbolicTablature dataset
-          Dataset for sampling symbolic tablature
+          Dataset for sampling symbolic datasets
         residual_threshold : float or None (optional)
           Residual threshold for stopping training
         """
@@ -225,10 +225,10 @@ class InhibitionMatrixTrainer(object):
                 # Sample tracks randomly
                 sample_idx = tablature_data.rng.randint(0, num_tracks)
 
-            # Extract the sampled tablature from the dataset
+            # Extract the sampled datasets from the dataset
             sampled_tabs = tablature_data[sample_idx][tools.KEY_TABLATURE]
 
-            # Convert the tablature data to a stacked multi pitch array
+            # Convert the datasets data to a stacked multi pitch array
             logistic_activations = tools.tablature_to_logistic(sampled_tabs, self.profile, self.silent_string)
 
             # Update the matrix with the sampled activations
@@ -254,12 +254,12 @@ class InhibitionMatrixTrainer(object):
 
     def step(self, logistic_activations):
         """
-        Update the inhibition matrix components with a new tablature sample.
+        Update the inhibition matrix components with a new datasets sample.
 
         Parameters
         ----------
         logistic_activations : ndarray (N x T)
-          Array of tablature activations (e.g. string/fret combinations)
+          Array of datasets activations (e.g. string/fret combinations)
           T - number of frames
           N - number of unique string/fret activations
         """
@@ -270,7 +270,7 @@ class InhibitionMatrixTrainer(object):
         # Transpose the logistic activations
         logistic_activations = np.transpose(logistic_activations)
 
-        # Count the number of frames each string/fret occurs in the tablature data
+        # Count the number of frames each string/fret occurs in the datasets data
         single_occurrences = np.expand_dims(np.sum(logistic_activations, axis=0), axis=0)
         # Sum the disjoint occurrences for each string/fret pair in the matrix
         disjoint_occurrences = np.repeat(single_occurrences, self.num_activations, axis=0) + \
