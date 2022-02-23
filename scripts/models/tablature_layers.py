@@ -4,7 +4,7 @@
 from amt_tools.models import TranscriptionModel, SoftmaxGroups, LogisticBank
 import amt_tools.tools as tools
 
-from inhibition.inhibition_matrix import load_inhibition_matrix, trim_inhibition_matrix
+from inhibition.inhibition_matrix_utils import load_inhibition_matrix, trim_inhibition_matrix
 
 # Regular imports
 import torch
@@ -353,7 +353,7 @@ class LogisticTablatureEstimator(TablatureEstimator):
         return batch
 
     @staticmethod
-    def calculate_inhibition_loss(logistic_tablature, inhibition_matrix, lmbda):
+    def calculate_inhibition_loss(logistic_tablature, inhibition_matrix, lmbda=1):
         """
         Calculate the inhibition loss for frame-level logistic
         tablature predictions, given a pre-existing inhibition matrix.
@@ -364,7 +364,7 @@ class LogisticTablatureEstimator(TablatureEstimator):
           Tensor of tablature activations (e.g. string/fret combinations)
           T - number of frames
           N - number of unique string/fret activations
-        inhibition_matrix : ndarray (N x N)
+        inhibition_matrix : tensor (N x N)
           Matrix of inhibitory weights for string/fret pairs
           N - number of unique string/fret activations
         lmbda : float

@@ -2,7 +2,7 @@
 
 # My imports
 from models.tabcnn_variants import TabCNNLogistic
-from evaluation.metrics import FalseAlarmErrors
+from metrics import FalseAlarmErrors
 from amt_tools.datasets import GuitarSet
 from amt_tools.features import CQT
 
@@ -49,7 +49,7 @@ validation_evaluator = ComboEvaluator([LossWrapper(),
                                        SoftmaxAccuracy(key=tools.KEY_TABLATURE)])
 
 # Define expected path for calculated features and ground-truth
-features_gt_cache = os.path.join('..', '..', 'generated', 'data')
+features_gt_cache = os.path.join('..', 'generated', 'data')
 
 ##################################################
 # GuitarSet                                      #

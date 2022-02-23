@@ -2,9 +2,9 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-import amt_tools.tools as tools
-
 from guitarpro_utils import validate_gpro_track, extract_stacked_notes_gpro_track
+
+import amt_tools.tools as tools
 
 # Regular imports
 import numpy as np

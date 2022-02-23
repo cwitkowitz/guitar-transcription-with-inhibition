@@ -2,7 +2,7 @@
 
 # My imports
 from models.tablature_layers import LogisticTablatureEstimator
-from inhibition_matrix import plot_inhibition_matrix
+from inhibition_matrix_utils import plot_inhibition_matrix
 
 import amt_tools.tools as tools
 

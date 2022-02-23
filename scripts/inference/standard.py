@@ -1,8 +1,8 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from amt_tools.evaluate import ComboEvaluator, MultipitchEvaluator, TablatureEvaluator, SoftmaxAccuracy
 from amt_tools.transcribe import ComboEstimator, TablatureWrapper, IterativeStackedNoteTranscriber
+from amt_tools.evaluate import ComboEvaluator, MultipitchEvaluator, TablatureEvaluator
 from amt_tools.inference import run_offline, run_online
 from amt_tools.features import CQT
 
@@ -123,4 +123,5 @@ results = evaluator.get_track_results(predictions, ground_truth)
 # Print results to the console
 print(results)
 
+# Display the plots
 plt.show()

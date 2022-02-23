@@ -1,4 +1,4 @@
-from amt_tools.transcribe import ComboEstimator, TablatureWrapper, StackedPitchListWrapper, IterativeStackedNoteTranscriber
+from amt_tools.transcribe import ComboEstimator, TablatureWrapper, IterativeStackedNoteTranscriber
 from amt_tools.inference import run_single_frame
 from amt_tools.features import MelSpec, MicrophoneStream
 
@@ -15,29 +15,26 @@ hop_length = 512
 
 # GPU to use
 gpu_id = 0
-device = torch.device(f'cuda:{gpu_id}'
-                      if torch.cuda.is_available() else 'cpu')
+device = torch.device(f'cuda:{gpu_id}' if torch.cuda.is_available() else 'cpu')
 
 # Load the model
 model = torch.load(model_path, map_location=device)
 model.change_device(gpu_id)
 model.eval()
 
-# Initialize the default guitar profile
-profile = tools.GuitarProfile()
+# Extract the guitar profile
+profile = model.profile
 
 # Initialize the feature extraction protocol
 data_proc = MelSpec(sample_rate=sample_rate, hop_length=hop_length, n_mels=192, decibels=False, center=False)
 
 # Define the estimation pipeline
 estimator = ComboEstimator([TablatureWrapper(profile=profile, stacked=True),
-                            #StackedPitchListWrapper(profile=profile)])
                             IterativeStackedNoteTranscriber(profile=profile, minimum_duration=0.1)])
 
 # Disable toolbar globally
 tools.global_toolbar_disable()
 # Create a figure to continually update
-#visualizer = tools.StackedPitchListVisualizer(figsize=(10, 5), plot_frequency=10, time_window=4)
 visualizer = tools.GuitarTablatureVisualizer(figsize=(10, 5), plot_frequency=10, time_window=5)
 
 # Instantiate the audio stream and start streaming
@@ -62,4 +59,5 @@ while not feature_stream.query_finished():
         stacked_frets = tools.stacked_notes_to_frets(stacked_notes, profile.tuning)
         # Call the visualizer's update loop
         visualizer.update(current_time, stacked_frets)
-        #visualizer.update(current_time, predictions[tools.KEY_PITCHLIST])
+
+# TODO - call feature_stream.stop_streaming() when user presses ENTER

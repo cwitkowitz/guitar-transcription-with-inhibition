@@ -1,7 +1,7 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from inhibition_matrix import load_inhibition_matrix, plot_inhibition_matrix, trim_inhibition_matrix
+from inhibition_matrix_utils import load_inhibition_matrix, plot_inhibition_matrix, trim_inhibition_matrix
 
 import amt_tools.tools as tools
 

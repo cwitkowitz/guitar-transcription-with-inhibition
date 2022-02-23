@@ -1,8 +1,8 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from inhibition.inhibition_matrix import InhibitionMatrixTrainer, plot_inhibition_matrix
-from models.tabcnn_variants import TabCNNLogistic, TabCNNRecurrent
+from inhibition.inhibition_matrix_utils import InhibitionMatrixTrainer, plot_inhibition_matrix
+from models.tabcnn_variants import TabCNNRecurrent
 from amt_tools.models import TabCNN
 
 import amt_tools.tools as tools

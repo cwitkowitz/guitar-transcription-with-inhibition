@@ -6,7 +6,7 @@ from amt_tools.features import CQT
 
 import amt_tools.tools as tools
 
-from inhibition.inhibition_matrix import load_inhibition_matrix, trim_inhibition_matrix
+from inhibition.inhibition_matrix_utils import load_inhibition_matrix, trim_inhibition_matrix
 from models.tablature_layers import LogisticTablatureEstimator
 
 # Regular imports
