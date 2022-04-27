@@ -1,8 +1,8 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from models.tablature_layers import LogisticTablatureEstimator
-from inhibition_matrix_utils import plot_inhibition_matrix
+from ..inhibition import plot_inhibition_matrix
+from ..models import LogisticTablatureEstimator
 
 import amt_tools.tools as tools
 
@@ -12,7 +12,7 @@ from matplotlib import rcParams
 import matplotlib.pyplot as plt
 
 # Initialize the default guitar profile
-profile = tools.GuitarProfile(num_frets=22)
+profile = tools.GuitarProfile(num_frets=19)
 
 # Initialize the default inhibition matrix
 matrix = LogisticTablatureEstimator.initialize_default_matrix(profile, False)

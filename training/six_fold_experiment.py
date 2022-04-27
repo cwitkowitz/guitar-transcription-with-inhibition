@@ -1,8 +1,8 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from models.tabcnn_variants import TabCNNLogistic
-from metrics import FalseAlarmErrors
+from guitar_transcription_inhibition.models import TabCNNLogistic
+from guitar_transcription_inhibition.metrics import FalseAlarmErrors
 from amt_tools.datasets import GuitarSet
 from amt_tools.features import CQT
 
@@ -20,7 +20,7 @@ from sacred import Experiment
 import torch
 import os
 
-EX_NAME = '_'.join(['name', 'of', 'experiment'])
+EX_NAME = '_'.join(['Logistic', 'dadagp+', 'l10'])
 
 ex = Experiment('Tablature Transcription on GuitarSet w/ 6-fold Cross Validation')
 
@@ -73,9 +73,8 @@ def config():
 def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoints,
                        batch_size, learning_rate, gpu_id, reset_data, validation_split,
                        seed, root_dir):
-
     # Specify the path to the inhibition matrix
-    matrix_path = os.path.join('..', 'generated', 'matrices', '<MATRIX_NAME>.npz')
+    matrix_path = os.path.join('..', 'generated', 'matrices', 'dadagp_silence_p128.npz')
 
     # Initialize the default guitar profile
     profile = tools.GuitarProfile(num_frets=19)
@@ -191,6 +190,7 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
                                 model_complexity=model_complexity,
                                 matrix_path=matrix_path,
                                 silence_activations=True,
+                                lmbda=10,
                                 device=gpu_id)
         tabcnn.change_device()
         tabcnn.train()

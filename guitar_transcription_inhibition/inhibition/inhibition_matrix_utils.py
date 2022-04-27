@@ -77,6 +77,7 @@ def trim_inhibition_matrix(inhibition_matrix, num_strings, num_pitches, silent_s
 
 def plot_inhibition_matrix(inhibition_matrix, v_bounds=None, include_axes=True, labels=None, fig=None):
     """
+    TODO - add to /visualization?
     Static function for plotting an inhibition matrix heatmap.
 
     Parameters
@@ -260,8 +261,8 @@ class InhibitionMatrixTrainer(object):
         ----------
         logistic_activations : ndarray (N x T)
           Array of datasets activations (e.g. string/fret combinations)
-          T - number of frames
           N - number of unique string/fret activations
+          T - number of frames
         """
 
         # Compute the matrix before the update

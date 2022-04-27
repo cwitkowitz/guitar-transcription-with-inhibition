@@ -1,10 +1,10 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
+from ..inhibition import load_inhibition_matrix, trim_inhibition_matrix
 from amt_tools.models import TranscriptionModel, SoftmaxGroups, LogisticBank
-import amt_tools.tools as tools
 
-from inhibition.inhibition_matrix_utils import load_inhibition_matrix, trim_inhibition_matrix
+import amt_tools.tools as tools
 
 # Regular imports
 import torch
@@ -353,22 +353,21 @@ class LogisticTablatureEstimator(TablatureEstimator):
         return batch
 
     @staticmethod
-    def calculate_inhibition_loss(logistic_tablature, inhibition_matrix, lmbda=1):
+    def calculate_inhibition_loss(logistic_tablature, inhibition_matrix):
         """
         Calculate the inhibition loss for frame-level logistic
         tablature predictions, given a pre-existing inhibition matrix.
 
         Parameters
         ----------
-        logistic_tablature : tensor (T x N)
+        logistic_tablature : tensor (B x T x N)
           Tensor of tablature activations (e.g. string/fret combinations)
+          B - batch size
           T - number of frames
           N - number of unique string/fret activations
         inhibition_matrix : tensor (N x N)
           Matrix of inhibitory weights for string/fret pairs
           N - number of unique string/fret activations
-        lmbda : float
-          Multiplier for the inhibition loss
 
         Returns
         ----------
@@ -392,9 +391,6 @@ class LogisticTablatureEstimator(TablatureEstimator):
 
         # Divide by two, since every pair will have a duplicate entry, and sum across pairs
         inhibition_loss = torch.sum(inhibition_loss / 2)
-
-        # Scale the inhibition loss by the specified multiplier
-        inhibition_loss *= lmbda
 
         return inhibition_loss
 
@@ -434,11 +430,12 @@ class LogisticTablatureEstimator(TablatureEstimator):
         # Determine if loss is being tracked
         if total_loss:
             # Compute the inhibition loss for the estimated tablature
-            inhibition_loss = self.calculate_inhibition_loss(tablature_est, self.inhibition_matrix, self.lmbda)
-            # Add the inhibition loss to the tracked loss dictionary
+            inhibition_loss = self.calculate_inhibition_loss(tablature_est, self.inhibition_matrix)
+            # Add the scaled inhibition loss to the tracked loss dictionary
             loss[tools.KEY_LOSS_INH] = inhibition_loss
             # Add the inhibition loss to the total loss
-            total_loss += inhibition_loss
+            #total_loss += self.lmbda * inhibition_loss
+            total_loss += 10 * inhibition_loss
 
         # Determine if loss is being tracked
         if total_loss:

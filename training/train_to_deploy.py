@@ -1,8 +1,8 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from models.tabcnn_variants import TabCNNLogistic
-from metrics import FalseAlarmErrors
+from guitar_transcription_inhibition.models import TabCNNLogistic
+from guitar_transcription_inhibition.metrics import FalseAlarmErrors
 from amt_tools.datasets import GuitarSet
 from amt_tools.features import MelSpec
 

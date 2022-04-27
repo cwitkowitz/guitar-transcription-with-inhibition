@@ -1,9 +1,9 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-import amt_tools.tools as tools
-
 from .SymbolicTablature import SymbolicTablature
+
+import amt_tools.tools as tools
 
 # Regular imports
 import os

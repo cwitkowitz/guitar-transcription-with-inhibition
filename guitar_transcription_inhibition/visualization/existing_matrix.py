@@ -1,7 +1,7 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from inhibition_matrix_utils import load_inhibition_matrix, plot_inhibition_matrix, trim_inhibition_matrix
+from ..inhibition import load_inhibition_matrix, plot_inhibition_matrix, trim_inhibition_matrix
 
 import amt_tools.tools as tools
 
@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import os
 
 # Construct a path for loading the inhibition matrix
-save_path = os.path.join('path', 'to', 'matrix.npz')
+save_path = os.path.join('..', '..', 'generated', 'matrices', 'dadagp_silence_p128.npz')
 
 # Load the inhibition matrix
 matrix = load_inhibition_matrix(save_path)
@@ -33,7 +33,7 @@ rcParams['font.size'] = 20
 fig = plt.figure(figsize=(10, 10), tight_layout=True)
 
 # Plot the inhibition matrix
-_ = plot_inhibition_matrix(matrix, fig=fig)
+fig = plot_inhibition_matrix(matrix, fig=fig)
 
 # Call this to pause execution
 plt.show(block=True)

@@ -1,12 +1,11 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
+from guitar_transcription_inhibition.metrics import FalseAlarmErrors
 from amt_tools.transcribe import ComboEstimator, TablatureWrapper, IterativeStackedNoteTranscriber
 from amt_tools.evaluate import ComboEvaluator, MultipitchEvaluator, TablatureEvaluator
 from amt_tools.inference import run_offline, run_online
 from amt_tools.features import CQT
-
-from metrics import FalseAlarmErrors
 
 import amt_tools.tools as tools
 

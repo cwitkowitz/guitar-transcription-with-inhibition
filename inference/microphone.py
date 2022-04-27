@@ -1,9 +1,13 @@
+# Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
+
+# My imports
 from amt_tools.transcribe import ComboEstimator, TablatureWrapper, IterativeStackedNoteTranscriber
 from amt_tools.inference import run_single_frame
 from amt_tools.features import MelSpec, MicrophoneStream
 
 import amt_tools.tools as tools
 
+# Regular imports
 import torch
 
 # Define path to model, audio, and ground-truth

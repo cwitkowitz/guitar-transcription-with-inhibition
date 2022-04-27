@@ -1,8 +1,8 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from inhibition_matrix_utils import InhibitionMatrixTrainer
-from datasets.GuitarProTabs import DadaGP
+from ..datasets import DadaGP
+from . import InhibitionMatrixTrainer
 from amt_tools.features import CQT
 
 import amt_tools.tools as tools
@@ -19,8 +19,6 @@ hop_length = 512
 profile = tools.GuitarProfile(num_frets=22)
 
 # Create the data processing module (only because TranscriptionDataset needs it)
-# TODO - it would be nice to not need this -- see TODO in datasets/common.py
-# Create the data processing module
 data_proc = CQT(sample_rate=sample_rate,
                 hop_length=hop_length,
                 n_bins=192,
@@ -36,11 +34,10 @@ gpro_train = DadaGP(base_dir=None,
                     profile=profile,
                     save_data=False,
                     store_data=False,
-                    max_duration=30,
-                    augment_notes=False)
+                    max_duration=30)
 
 # Select the power for boosting
-boost = 1
+boost = 128
 
 # Construct a path for saving the inhibition matrix
 save_path = os.path.join('..', '..', 'generated', 'matrices', f'dadagp_silence_p{boost}.npz')

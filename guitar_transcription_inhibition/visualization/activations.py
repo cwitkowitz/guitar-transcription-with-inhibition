@@ -1,8 +1,8 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from inhibition.inhibition_matrix_utils import InhibitionMatrixTrainer, plot_inhibition_matrix
-from models.tabcnn_variants import TabCNNRecurrent
+from ..inhibition import InhibitionMatrixTrainer, plot_inhibition_matrix
+from ..models import TabCNNRecurrent
 from amt_tools.models import TabCNN
 
 import amt_tools.tools as tools
@@ -125,7 +125,7 @@ def visualize(model, tablature_dataset, save_dir, config=[0, 0, 1], lhood_select
                            isinstance(model, TabCNNRecurrent) else model.silence_activations
 
     # Initialize a matrix trainer for visualizing the pairwise likelihood of activations
-    trainer = InhibitionMatrixTrainer(model.profile, silent_string=silent_class, power=1)
+    trainer = InhibitionMatrixTrainer(model.profile, silent_string=silent_class, boost=1)
 
     # Determine the parameters of the tablature
     num_strings = model.profile.get_num_dofs()
@@ -227,6 +227,52 @@ def visualize(model, tablature_dataset, save_dir, config=[0, 0, 1], lhood_select
 
     # Construct a save path for the pairwise weights
     inhibition_path = os.path.join(save_dir, f'_pairwise_likelihood.jpg')
+    # Make sure the save directory exists
+    os.makedirs(os.path.dirname(inhibition_path), exist_ok=True)
+
+    # Create a figure for plotting
+    fig = plt.figure(figsize=(10, 10))
+    # Plot the inhibition matrix and return the figure
+    fig = plot_inhibition_matrix(pairwise_activations, v_bounds=[0, 1], fig=fig)
+    # Save the figure to the specified path
+    fig.savefig(inhibition_path, bbox_inches='tight')
+    # Close the figure
+    plt.close(fig)
+
+# TODO - delete everything below or clean it up
+
+from amt_tools.datasets import GuitarSet
+from amt_tools.features import CQT
+
+sample_rate = 22050
+hop_length = 512
+
+# Create the data processing module
+data_proc = CQT(sample_rate=sample_rate,
+                hop_length=hop_length,
+                n_bins=192,
+                bins_per_octave=24)
+
+profile = tools.GuitarProfile(num_frets=19)
+
+gset = GuitarSet(base_dir=None,
+                 hop_length=hop_length,
+                 sample_rate=sample_rate,
+                 data_proc=data_proc,
+                 profile=profile,
+                 reset_data=False,
+                 store_data=False,
+                 save_loc=os.path.join('../..', 'generated', 'data'))
+
+for track_gt in gset:
+    track_name = track_gt[tools.KEY_TRACK]
+    trainer = InhibitionMatrixTrainer(profile, silent_string=True, boost=128)
+    logistic_activations = tools.tablature_to_logistic(track_gt[tools.KEY_TABLATURE], profile, True)
+    trainer.step(logistic_activations)
+    pairwise_activations = trainer.compute_current_matrix()
+
+    # Construct a save path for the pairwise weights
+    inhibition_path = os.path.join('../..', 'generated', 'guitarset_acivations', f'{track_name}.jpg')
     # Make sure the save directory exists
     os.makedirs(os.path.dirname(inhibition_path), exist_ok=True)
 

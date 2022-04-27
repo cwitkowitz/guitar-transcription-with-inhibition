@@ -1,11 +1,10 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
+from .SymbolicTablature import SymbolicTablature
 from amt_tools.datasets import GuitarSet
 
 import amt_tools.tools as tools
-
-from .SymbolicTablature import SymbolicTablature
 
 # Regular imports
 import os

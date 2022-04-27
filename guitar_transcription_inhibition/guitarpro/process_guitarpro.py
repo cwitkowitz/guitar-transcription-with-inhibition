@@ -2,7 +2,7 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from guitarpro_utils import validate_gpro_track, extract_stacked_notes_gpro_track
+from . import validate_gpro_track, extract_stacked_notes_gpro_track
 
 import amt_tools.tools as tools
 
@@ -127,7 +127,7 @@ def guitarpro_to_jams(gpro_path, jams_dir):
 
 if __name__ == '__main__':
     # Construct a path to the base directory
-    base_dir = 'path/to/DadaGP'
+    base_dir = '/home/rockstar/Desktop/Datasets/DadaGP'
 
     # Search the specified path for GuitarPro files
     tracked_files, tracked_paths = get_valid_files(base_dir)

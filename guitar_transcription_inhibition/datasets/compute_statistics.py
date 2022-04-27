@@ -1,13 +1,12 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
+from ..inhibition import load_inhibition_matrix, trim_inhibition_matrix
+from ..models import LogisticTablatureEstimator
 from amt_tools.datasets import GuitarSet
 from amt_tools.features import CQT
 
 import amt_tools.tools as tools
-
-from inhibition.inhibition_matrix_utils import load_inhibition_matrix, trim_inhibition_matrix
-from models.tablature_layers import LogisticTablatureEstimator
 
 # Regular imports
 import numpy as np
@@ -30,9 +29,9 @@ def get_observation_statistics(tablature_dataset, profile, string_silence=False)
 
     Returns
     ----------
-    total_num_frames : int
+    total_frames : int
       Total number of frames encountered in the dataset
-    num_observations : ndarray (S x C)
+    occurrences : ndarray (S x C)
       Total number of occurences for each string/fret
       S - number of degrees of freedom (strings)
       C - number of classes
@@ -103,44 +102,6 @@ def compute_balanced_class_weighting(tablature_dataset, profile, string_silence=
     return balanced_weighting
 
 
-def compute_alternative_class_weighting(tablature_dataset, profile):
-    """
-    Obtain a weighting to transfer the energy
-    of the silent classes to the positive classes.
-
-    Parameters
-    ----------
-    tablature_dataset : SymbolicTablature dataset
-      Dataset containing symbolic tablature
-    profile : TablatureProfile (tools/instrument.py)
-      Instructions for organizing tablature into logistic activations
-
-    Returns
-    ----------
-    class_weighting : ndarray (S x C)
-      Weights for classes such that the positive
-      classes receive the energy of the silence classes
-      S - number of degrees of freedom (strings)
-      C - number of classes
-    """
-
-    # Obtain the total number of frames and occurrences of each string/fret
-    total_frames, occurrences = get_observation_statistics(tablature_dataset, profile, True)
-
-    # Determine the percentage of classes where each string/fret occurs
-    class_weighting = occurrences / (total_frames + 1E-10)
-
-    # Obtain a reference to the weight of the silence classes
-    silence_weights = class_weighting[:, -1]
-
-    # Transfer the weight of the silence classes to the non-silent classes
-    class_weighting[:, :-1] *= np.expand_dims(silence_weights / (1 - silence_weights), axis=-1)
-    # Reverse the weight of the silence classes
-    class_weighting[:, -1] = 1 - silence_weights
-
-    return class_weighting
-
-
 def compute_dataset_inhibition_loss(tablature_dataset, inhibition_matrix, profile, string_silence=False):
     """
     Compute the inhibition loss over an entire symbolic
@@ -150,6 +111,9 @@ def compute_dataset_inhibition_loss(tablature_dataset, inhibition_matrix, profil
     ----------
     tablature_dataset : TranscriptionDataset
       Dataset containing symbolic tablature
+    inhibition_matrix : tensor (N x N)
+      Matrix of inhibitory weights for string/fret pairs
+      N - number of unique string/fret activations
     profile : TablatureProfile (tools/instrument.py)
       Instructions for organizing tablature into logistic activations
     string_silence : bool
@@ -157,12 +121,8 @@ def compute_dataset_inhibition_loss(tablature_dataset, inhibition_matrix, profil
 
     Returns
     ----------
-    total_num_frames : int
-      Total number of frames encountered in the dataset
-    num_observations : ndarray (S x C)
-      Total number of occurences for each string/fret
-      S - number of degrees of freedom (strings)
-      C - number of classes
+    total_loss : float
+      Average inhibition loss over each track in the dataset
     """
 
     # Initialize a list to keep track of each track's loss
@@ -192,6 +152,48 @@ def compute_dataset_inhibition_loss(tablature_dataset, inhibition_matrix, profil
     return total_loss
 
 
+def count_dataset_duplicate_pitches(tablature_dataset, profile):
+    """
+    Compute the average number of duplicate pitches (frame-level) over an entire symbolic tablature dataset.
+
+    Parameters
+    ----------
+    tablature_dataset : TranscriptionDataset
+      Dataset containing symbolic tablature
+    profile : TablatureProfile (tools/instrument.py)
+      Instructions for organizing tablature into logistic activations
+
+    Returns
+    ----------
+    total_duplicates : float
+      Average number of duplicate pitches across each track in the dataset
+    """
+
+    # Initialize a list to keep track of each track's count
+    duplcates = []
+
+    # Loop through the symbolic tablature dataset
+    for track_data in tablature_dataset:
+        # Extract the tablature
+        tablature = track_data[tools.KEY_TABLATURE]
+        # Convert from tablature format to stacked multi pitch format
+        stacked_multipitch = tools.tablature_to_stacked_multi_pitch(tablature, profile)
+        # Collapse the stack by summation
+        multipitch = np.sum(stacked_multipitch, axis=-3)
+        # Subtract one for single occurrences
+        multipitch = multipitch - 1
+        # Zero-out pitches which occurred once or not at all
+        multipitch[multipitch < 0] = 0
+
+        # Sum the remaining (duplicated) pitch counts and add to the tracked list
+        duplcates += [np.sum(multipitch)]
+
+    # Average the loss across all tracks
+    total_duplicates = np.mean(duplcates)
+
+    return total_duplicates
+
+
 if __name__ == '__main__':
     # Initialize the default guitar profile
     profile = tools.GuitarProfile(num_frets=19)
@@ -208,7 +210,7 @@ if __name__ == '__main__':
                     bins_per_octave=24)
 
     # All data/features cached here
-    gset_cache = os.path.join('..', 'generated', 'data')
+    gset_cache = os.path.join('../..', 'generated', 'data')
 
     # Initialize GuitarSet to compute statistics
     tablature_dataset = GuitarSet(base_dir=None,
@@ -232,12 +234,8 @@ if __name__ == '__main__':
 
     print(f'Balanced Weighting : \n{balanced_weighting}')
 
-    # Obtain an alternative class weighting for the dataset
-    alternative_weighting = compute_alternative_class_weighting(tablature_dataset, profile)
-
-    print(f'Alternative Weighting : \n{alternative_weighting}')
-
-    matrix_path = 'path/to/matrix'
+    #matrix_path = 'path/to/matrix'
+    matrix_path = '/generated/matrices/dadagp_silence_p128.npz'
 
     # Load the inhibition matrix
     inhibition_matrix = load_inhibition_matrix(matrix_path)
@@ -253,3 +251,8 @@ if __name__ == '__main__':
     inhibition_loss = compute_dataset_inhibition_loss(tablature_dataset, inhibition_matrix, profile, True)
 
     print(f'Inhibition Loss : {inhibition_loss}')
+
+    # Compute the average number of duplicate pitches on the full dataset
+    duplicate_pitches = count_dataset_duplicate_pitches(tablature_dataset, profile)
+
+    print(f'Avg. Duplicate Pitches : {duplicate_pitches}')

@@ -1,13 +1,12 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from .tablature_layers import LogisticTablatureEstimator
-from amt_tools.models import TabCNN, LanguageModel
+from . import LogisticTablatureEstimator
+from amt_tools.models import TabCNN, OnlineLanguageModel
 
 import amt_tools.tools as tools
 
 # Regular imports
-import torch.nn as nn
 import torch
 
 
@@ -40,8 +39,8 @@ class TabCNNLogistic(TabCNNRecurrent):
     Implements TabCNN with a logistic output layer instead of the classic (softmax) output layer.
     """
 
-    def __init__(self, dim_in, profile, in_channels, model_complexity=1,
-                 matrix_path=None, silence_activations=False, device='cpu'):
+    def __init__(self, dim_in, profile, in_channels, model_complexity=1, matrix_path=None,
+                 silence_activations=False, lmbda=1, device='cpu'):
         """
         Initialize the model and replace the final layer.
 
@@ -52,12 +51,14 @@ class TabCNNLogistic(TabCNNRecurrent):
           Path to inhibition matrix
         silence_activations : bool
           Whether to explicitly model silence
+        lmbda : float
+          Multiplier for the inhibition loss
         """
 
         super().__init__(dim_in, profile, in_channels, model_complexity, device)
 
         # Replace the tablature layer with a logistic datasets estimator
-        self.dense[-1] = LogisticTablatureEstimator(128, profile, matrix_path, silence_activations, device)
+        self.dense[-1] = LogisticTablatureEstimator(128, profile, matrix_path, silence_activations, lmbda, device)
 
     def change_device(self, device=None):
         """
@@ -151,66 +152,3 @@ class TabCNNLogistic(TabCNNRecurrent):
         output = tablature_output_layer.post_proc(batch)
 
         return output
-
-
-class OnlineLanguageModel(LanguageModel):
-    """
-    Implements a uni-directional and online-capable LSTM language model.
-    """
-
-    def __init__(self, dim_in, dim_out):
-        """
-        Initialize the language model and establish parameter defaults in function signature.
-
-        Parameters
-        ----------
-        See LanguageModel class...
-        """
-
-        super().__init__()
-
-        self.dim_in = dim_in
-        self.dim_out = dim_out
-
-        # Determine the number of neurons
-        self.hidden_size = self.dim_out
-
-        # Initialize the LSTM
-        self.mlm = nn.LSTM(input_size=self.dim_in,
-                           hidden_size=self.hidden_size,
-                           batch_first=True,
-                           bidirectional=False)
-
-        # Keep track of the hidden and cell state
-        self.hidden = None
-        self.cell = None
-
-    def forward(self, in_feats):
-        """
-        Feed features through the music language model.
-
-        Parameters
-        ----------
-        in_feats : Tensor (B x 1 x E)
-          Input features for a batch of tracks,
-          B - batch size
-          T - number of frames
-          E - dimensionality of input embeddings (dim_in)
-
-        Returns
-        ----------
-        out_feats : Tensor (B x 1 x E)
-          Embeddings for a batch of tracks,
-          B - batch size
-          T - number of frames
-          E - dimensionality of output embeddings (dim_out)
-        """
-
-        if self.training:
-            # Call the regular forward function
-            out_feats = super().forward(in_feats)
-        else:
-            # Process the chunk, using the previous hidden and cell state
-            out_feats, (self.hidden, self.cell) = self.mlm(in_feats, (self.hidden, self.cell))
-
-        return out_feats

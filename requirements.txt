@@ -1,2 +1,2 @@
 amt_tools>=0.1.4
-guitarpro>=0.8
+pyguitarpro>=0.8

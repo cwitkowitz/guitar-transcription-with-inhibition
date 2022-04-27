@@ -1,8 +1,8 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from inhibition_matrix_utils import InhibitionMatrixTrainer
-from datasets.GuitarSetTabs import GuitarSetTabs
+from ..datasets import GuitarSetTabs
+from . import InhibitionMatrixTrainer
 from amt_tools.features import CQT
 
 import amt_tools.tools as tools
@@ -19,8 +19,6 @@ sample_rate = 22050
 hop_length = 512
 
 # Create the data processing module (only because TranscriptionDataset needs it)
-# TODO - it would be nice to not need this -- see TODO in datasets/common.py
-# Create the data processing module
 data_proc = CQT(sample_rate=sample_rate,
                 hop_length=hop_length,
                 n_bins=192,
@@ -58,8 +56,7 @@ for k in range(6):
                                data_proc=data_proc,
                                profile=profile,
                                save_data=False,
-                               store_data=False,
-                               augment_notes=False)
+                               store_data=False)
 
     # Obtain an inhibition matrix from the GuitarSet data
     InhibitionMatrixTrainer(profile, True, boost=boost, save_path=save_path).train(gset_train, residual_threshold=None)
