@@ -7,7 +7,7 @@ setup(
     author_email='fcwitkow@ur.rochester.edu',
     # TODO - why does 'pip install -e' consider generated/training/inference as packages?
     packages=find_packages(),
-    python_requires='>=3.9',
+    python_requires='>=3.8',
     install_requires=['amt_tools', 'pyguitarpro'],
     version='0.0.9',
     license='MIT',
