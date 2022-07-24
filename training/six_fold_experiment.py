@@ -6,7 +6,7 @@ from guitar_transcription_inhibition.metrics import FalseAlarmErrors
 from amt_tools.datasets import GuitarSet
 from amt_tools.features import CQT
 
-from amt_tools.train import train, validate
+from amt_tools.train import train
 from amt_tools.transcribe import *
 from amt_tools.evaluate import *
 

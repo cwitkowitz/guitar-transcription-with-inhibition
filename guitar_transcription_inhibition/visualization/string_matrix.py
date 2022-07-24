@@ -1,8 +1,8 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from ..inhibition import plot_inhibition_matrix
-from ..models import LogisticTablatureEstimator
+from guitar_transcription_inhibition.inhibition import plot_inhibition_matrix
+from guitar_transcription_inhibition.models import LogisticTablatureEstimator
 
 import amt_tools.tools as tools
 

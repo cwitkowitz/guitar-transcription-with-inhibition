@@ -1,8 +1,8 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from ..datasets import GuitarSetTabs
-from . import InhibitionMatrixTrainer
+from guitar_transcription_inhibition.inhibition import InhibitionMatrixTrainer
+from guitar_transcription_inhibition.datasets import GuitarSetTabs
 from amt_tools.features import CQT
 
 import amt_tools.tools as tools

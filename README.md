@@ -2,7 +2,7 @@
 Code for the paper [A Data-Driven Methodology for Considering Feasibility and Pairwise Likelihood in Deep Learning Based Guitar Tablature Transcription Systems](https://arxiv.org/abs/2204.08094).
 The repository contains scripts to do the following:
 * Generate [JAMS](https://jams.readthedocs.io/en/stable/) files from [GuitarPro](https://www.guitar-pro.com/) data using [PyGuitarPro](https://pyguitarpro.readthedocs.io/en/stable/)
-* Create a matrix of inhibition weights from tablature annotations
+* Create a matrix of inhibition weights from a collection of tablature annotations (e.g., [DadaGP](https://github.com/dada-bots/dadaGP))
 * Implements our proposed output layer formulation with inhibition
   * Interchangeable with [TabCNN](https://archives.ismir.net/ismir2019/paper/000033.pdf)'s output layer formulation
 * Run six-fold cross-validation experiments on [GuitarSet](https://guitarset.weebly.com/)

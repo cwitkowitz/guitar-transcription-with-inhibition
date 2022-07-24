@@ -434,8 +434,7 @@ class LogisticTablatureEstimator(TablatureEstimator):
             # Add the scaled inhibition loss to the tracked loss dictionary
             loss[tools.KEY_LOSS_INH] = inhibition_loss
             # Add the inhibition loss to the total loss
-            #total_loss += self.lmbda * inhibition_loss
-            total_loss += 10 * inhibition_loss
+            total_loss += self.lmbda * inhibition_loss
 
         # Determine if loss is being tracked
         if total_loss:

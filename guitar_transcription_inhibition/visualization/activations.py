@@ -1,8 +1,8 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from ..inhibition import InhibitionMatrixTrainer, plot_inhibition_matrix
-from ..models import TabCNNRecurrent
+from guitar_transcription_inhibition.inhibition import InhibitionMatrixTrainer, plot_inhibition_matrix
+from guitar_transcription_inhibition.models import TabCNNRecurrent
 from amt_tools.models import TabCNN
 
 import amt_tools.tools as tools

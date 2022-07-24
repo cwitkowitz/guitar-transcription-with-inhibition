@@ -2,7 +2,7 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from . import validate_gpro_track, extract_stacked_notes_gpro_track
+from guitar_transcription_inhibition.gpro import validate_gpro_track, extract_stacked_notes_gpro_track
 
 import amt_tools.tools as tools
 

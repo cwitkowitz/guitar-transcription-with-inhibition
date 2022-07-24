@@ -1,8 +1,8 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from ..inhibition import load_inhibition_matrix, trim_inhibition_matrix
-from ..models import LogisticTablatureEstimator
+from guitar_transcription_inhibition.inhibition import load_inhibition_matrix, trim_inhibition_matrix
+from guitar_transcription_inhibition.models import LogisticTablatureEstimator
 from amt_tools.datasets import GuitarSet
 from amt_tools.features import CQT
 
@@ -234,8 +234,7 @@ if __name__ == '__main__':
 
     print(f'Balanced Weighting : \n{balanced_weighting}')
 
-    #matrix_path = 'path/to/matrix'
-    matrix_path = '/generated/matrices/dadagp_silence_p128.npz'
+    matrix_path = 'path/to/matrix'
 
     # Load the inhibition matrix
     inhibition_matrix = load_inhibition_matrix(matrix_path)
