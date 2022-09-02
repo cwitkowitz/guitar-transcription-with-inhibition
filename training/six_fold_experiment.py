@@ -114,6 +114,7 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
         tools.seed_everything(seed)
 
         # Determine the testing split for the fold
+        # TODO - better fold allocating
         test_hold_out = '0' + str(k)
 
         print('--------------------')

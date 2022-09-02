@@ -134,6 +134,7 @@ ground_truth = {tools.KEY_MULTIPITCH : multipitch_ref,
                 tools.KEY_NOTES : stacked_notes_ref}
 
 # Evaluate the predictions and track the results
+# TODO - update to evaluator.process_track after release of amt-tools updates
 results = evaluator.get_track_results(predictions, ground_truth)
 
 # Print results to the console

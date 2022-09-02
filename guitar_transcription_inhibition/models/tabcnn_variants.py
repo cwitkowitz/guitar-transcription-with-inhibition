@@ -1,8 +1,8 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from . import LogisticTablatureEstimator
 from amt_tools.models import TabCNN, OnlineLanguageModel
+from . import LogisticTablatureEstimator
 
 import amt_tools.tools as tools
 
@@ -26,15 +26,19 @@ class TabCNNRecurrent(TabCNN):
 
         super().__init__(dim_in, profile, in_channels, model_complexity, device)
 
+        # Break off the output layer so it can be referenced
+        dense_core, tablature_layer = self.dense[:-1], self.dense[-1]
+
         # Insert the recurrent layer before the output layer
         self.dense = torch.nn.Sequential(
-            self.dense[:-1],
-            OnlineLanguageModel(dim_in=128, dim_out=128),
-            self.dense[-1]
+            dense_core,
+            OnlineLanguageModel(dim_in=tablature_layer.dim_in,
+                                dim_out=tablature_layer.dim_in),
+            tablature_layer
         )
 
 
-class TabCNNLogistic(TabCNNRecurrent):
+class TabCNNLogistic(TabCNN):
     """
     Implements TabCNN with a logistic output layer instead of the classic (softmax) output layer.
     """
@@ -57,12 +61,20 @@ class TabCNNLogistic(TabCNNRecurrent):
 
         super().__init__(dim_in, profile, in_channels, model_complexity, device)
 
+        # Break off the output layer to establish an explicit reference
+        self.dense, self.tablature_layer = self.dense[:-1], self.dense[-1]
+
         # Replace the tablature layer with a logistic datasets estimator
-        self.dense[-1] = LogisticTablatureEstimator(128, profile, matrix_path, silence_activations, lmbda, device)
+        self.tablature_layer = LogisticTablatureEstimator(dim_in=self.tablature_layer.dim_in,
+                                                          profile=profile,
+                                                          matrix_path=matrix_path,
+                                                          silence_activations=silence_activations,
+                                                          lmbda=lmbda,
+                                                          device=device)
 
     def change_device(self, device=None):
         """
-        Change the device and load the model onto the new device.
+        Change the device and load the model and output layer onto the new device.
 
         Parameters
         ----------
@@ -73,7 +85,7 @@ class TabCNNLogistic(TabCNNRecurrent):
         super().change_device(device)
 
         # Update the tracked device of the tablature layer
-        self.dense[-1].change_device(device)
+        self.tablature_layer.change_device(device)
 
     def pre_proc(self, batch):
         """
@@ -92,7 +104,7 @@ class TabCNNLogistic(TabCNNRecurrent):
         """
 
         # Perform output layer pre-processing steps
-        batch = self.dense[-1].pre_proc(batch)
+        batch = self.tablature_layer.pre_proc(batch)
 
         # Perform TabCNN pre-processing steps
         batch = super().pre_proc(batch)
@@ -105,9 +117,10 @@ class TabCNNLogistic(TabCNNRecurrent):
 
         Parameters
         ----------
-        feats : Tensor (B x T x F x W)
+        feats : Tensor (B x C x T x F x W)
           Input features for a batch of tracks,
           B - batch size
+          C - number of channels in features
           T - number of frames
           F - number of features (frequency bins)
           W - frame width of each sample
@@ -124,8 +137,11 @@ class TabCNNLogistic(TabCNNRecurrent):
         # Run the standard steps
         output = super().forward(feats)
 
-        # Do not double-pack the datasets
-        output = output.pop(tools.KEY_TABLATURE)
+        # Extract the embeddings from the output dictionary (labeled as tablature)
+        embeddings = output.pop(tools.KEY_TABLATURE)
+
+        # Process the embeddings with the output layer
+        output = self.tablature_layer(embeddings)
 
         return output
 
@@ -145,10 +161,30 @@ class TabCNNLogistic(TabCNNRecurrent):
           Dictionary containing tablature as well as loss
         """
 
-        # Obtain a pointer to the output layer
-        tablature_output_layer = self.dense[-1]
-
         # Call the post-processing method of the tablature layer
-        output = tablature_output_layer.post_proc(batch)
+        output = self.tablature_layer.post_proc(batch)
 
         return output
+
+
+class TabCNNLogisticRecurrent(TabCNNLogistic):
+    """
+    Implements TabCNNLogistic with a recurrent layer inserted before output layer.
+    """
+
+    def __init__(self, dim_in, profile, in_channels, model_complexity=1, matrix_path=None,
+                 silence_activations=False, lmbda=1, device='cpu'):
+        """
+        Initialize the model and insert the recurrent layer.
+
+        Parameters
+        ----------
+        See TabCNNLogistic class...
+        """
+
+        super().__init__(dim_in, profile, in_channels, model_complexity,
+                         matrix_path, silence_activations, lmbda, device)
+
+        # Insert a recurrent layer at the end of the dense core
+        self.dense.append(OnlineLanguageModel(dim_in=self.tablature_layer.dim_in,
+                                              dim_out=self.tablature_layer.dim_in))

@@ -250,6 +250,9 @@ class LogisticTablatureEstimator(TablatureEstimator):
         # Set the tablature layer to a Logistic bank
         self.tablature_layer = LogisticBank(dim_in, dim_out)
 
+        # Make sure the device is valid before creating the inhibition matrix
+        self.change_device()
+
         if matrix_path is None:
             # Default the inhibition matrix if it does not exist (inhibit string groups)
             self.inhibition_matrix = self.initialize_default_matrix(self.profile, self.silence_activations).to(self.device)
