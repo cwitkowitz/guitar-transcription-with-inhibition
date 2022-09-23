@@ -34,8 +34,8 @@ class SymbolicTablature(TranscriptionDataset):
 
         self.max_duration = 60 * max_duration # Convert to seconds
 
-        super().__init__(base_dir, splits, hop_length, sample_rate, data_proc, profile,
-                         num_frames, split_notes, reset_data, store_data, save_data, save_loc, seed)
+        super().__init__(base_dir, splits, hop_length, sample_rate, data_proc, profile, num_frames,
+                         -1, split_notes, reset_data, store_data, save_data, save_loc, seed)
 
     def __getitem__(self, index):
         """
@@ -168,9 +168,8 @@ class SymbolicTablature(TranscriptionDataset):
             # Get the times for the start of each frame
             times = tools.get_frame_times(duration, self.sample_rate, self.hop_length)
 
-            # Convert the string-wise notes into a stacked multi pitch array,
-            # discarding offsets to circumvent frame overlap on adjacent notes
-            stacked_multi_pitch = tools.stacked_notes_to_stacked_multi_pitch(stacked_notes, times, self.profile, False)
+            # Convert the string-wise notes into a stacked multi pitch array
+            stacked_multi_pitch = tools.stacked_notes_to_stacked_multi_pitch(stacked_notes, times, self.profile)
 
             # Convert the stacked multi pitch array into a single representation
             data[tools.KEY_MULTIPITCH] = tools.stacked_multi_pitch_to_multi_pitch(stacked_multi_pitch)
