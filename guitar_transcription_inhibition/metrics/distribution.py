@@ -19,30 +19,18 @@ class FalseAlarmErrors(TablatureEvaluator):
     Implements an evaluator for counting the number of false alarm errors.
     """
 
-    def __init__(self, profile, key=None, save_dir=None, patterns=None, verbose=False):
-        """
-        Initialize parameters for the evaluator.
-
-        Parameters
-        ----------
-        See TablatureEvaluator class...
-        """
-
-        super().__init__(profile, key, save_dir, patterns, verbose)
-
     def evaluate(self, estimated, reference):
         """
         Evaluate a stacked multi pitch tablature estimate with respect to a reference.
 
         Parameters
         ----------
-        estimated : ndarray (S x F x T)
-          Array of multiple discrete pitch activation maps
-          S - number of slices in stack
-          F - number of discrete pitches
+        estimated : ndarray (S x T)
+          Array of class membership for multiple degrees of freedom (e.g. strings)
+          S - number of strings or degrees of freedom
           T - number of frames
-        reference : ndarray (S x F x T)
-          Array of multiple discrete pitch activation maps
+        reference : ndarray (S x T)
+          Array of class membership for multiple degrees of freedom (e.g. strings)
           Dimensions same as estimated
 
         Returns
@@ -51,23 +39,26 @@ class FalseAlarmErrors(TablatureEvaluator):
           Dictionary containing number of duplicate pitch errors
         """
 
-        # Treat the stacked multi pitch arrays as logistic activations (with no silence class)
-        # TODO - add to pre_proc?
-        logistic_est = tools.stacked_multi_pitch_to_logistic(estimated, self.profile, False)
-        logistic_ref = tools.stacked_multi_pitch_to_logistic(reference, self.profile, False)
+        # Convert from tablature format to logistic activations format (with no silence class)
+        logistic_est = tools.tablature_to_logistic(estimated, self.profile, silence=False)
+        logistic_ref = tools.tablature_to_logistic(reference, self.profile, silence=False)
 
         # Compute the number of false alarm errors
         false_alarm_errors = np.sum(np.logical_and(logistic_est, np.logical_not(logistic_ref)))
 
+        # Convert the tablature into stacked multi pitch representations
+        stacked_multi_pitch_est = tools.tablature_to_stacked_multi_pitch(estimated, self.profile)
+        stacked_multi_pitch_ref = tools.tablature_to_stacked_multi_pitch(reference, self.profile)
+
         # Collapse the stack by summation
-        multipitch_est = np.sum(estimated, axis=-3)
-        multipitch_ref = np.sum(reference, axis=-3)
+        multi_pitch_est = np.sum(stacked_multi_pitch_est, axis=-3)
+        multi_pitch_ref = np.sum(stacked_multi_pitch_ref, axis=-3)
 
         # Determine where the estimated and reference multipitch overlap
-        valid_idcs = np.logical_and(multipitch_est, multipitch_ref)
+        valid_idcs = np.logical_and(multi_pitch_est, multi_pitch_ref)
 
         # Subtract the ground-truth pitch activations from the estimates
-        duplicate_pitches = multipitch_est[valid_idcs] - multipitch_ref[valid_idcs]
+        duplicate_pitches = multi_pitch_est[valid_idcs] - multi_pitch_ref[valid_idcs]
 
         # Do not factor in cases where the estimated pitch count is smaller
         # than the reference - i.e., duplicated pitches in the ground-truth

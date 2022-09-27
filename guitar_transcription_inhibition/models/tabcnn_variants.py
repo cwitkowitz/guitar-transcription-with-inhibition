@@ -64,7 +64,7 @@ class TabCNNLogistic(TabCNN):
         # Break off the output layer to establish an explicit reference
         self.dense, self.tablature_layer = self.dense[:-1], self.dense[-1]
 
-        # Replace the tablature layer with a logistic datasets estimator
+        # Replace the tablature layer with a logistic tablature estimator
         self.tablature_layer = LogisticTablatureEstimator(dim_in=self.tablature_layer.dim_in,
                                                           profile=profile,
                                                           matrix_path=matrix_path,
@@ -117,11 +117,11 @@ class TabCNNLogistic(TabCNN):
 
         Parameters
         ----------
-        feats : Tensor (B x C x T x F x W)
+        feats : Tensor (B x T x C x F x W)
           Input features for a batch of tracks,
           B - batch size
-          C - number of channels in features
           T - number of frames
+          C - number of channels in features
           F - number of features (frequency bins)
           W - frame width of each sample
 
