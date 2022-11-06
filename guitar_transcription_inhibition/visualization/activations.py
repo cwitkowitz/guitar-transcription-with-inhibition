@@ -239,3 +239,9 @@ def visualize(model, tablature_dataset, save_dir, config=[0, 0, 1], lhood_select
     fig.savefig(inhibition_path, bbox_inches='tight')
     # Close the figure
     plt.close(fig)
+
+
+if __name__ == '__main__':
+    # TODO - add working example
+
+    print()
