@@ -1,4 +1,4 @@
-from .GuitarProTabs import DadaGP
+from .DadaGP import DadaGP
 from .GuitarSetTabs import GuitarSetTabs
 from .SymbolicTablature import SymbolicTablature
 from .compute_statistics import get_observation_statistics, \

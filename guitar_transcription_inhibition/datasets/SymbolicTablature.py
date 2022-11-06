@@ -14,32 +14,39 @@ import jams
 
 class SymbolicTablature(TranscriptionDataset):
     """
-    Implements a wrapper for any dataset with symbolic tablature stored in JAMS format.
+    Implements a wrapper for a dataset with symbolic tablature stored in JAMS format.
     """
 
-    def __init__(self, base_dir=None, splits=None, hop_length=512, sample_rate=44100, data_proc=None,
-                 profile=None, num_frames=None, split_notes=False, reset_data=False, store_data=True,
-                 save_data=True, save_loc=None, seed=0, max_duration=0):
+    def __init__(self, base_dir=None, splits=None, hop_length=512, sample_rate=22050, profile=None, num_frames=None,
+                 split_notes=False, reset_data=False, store_data=False, save_data=True, save_loc=None, seed=0,
+                 max_duration=0, max_sample_attempts=1):
         """
-        Initialize the dataset and establish parameter defaults in function signature.
+        Initialize a symbolic tablature dataset and establish parameter defaults in function signature.
 
         Parameters
         ----------
         See TranscriptionDataset class for others...
+
         max_duration : float
-          Maximum duration in minutes a JAMS file can represent. Files longer than this will be randomly
-          sliced to fit the maximum. Depending on the amount of RAM available, converting a very long
-          duration to frames can cause a crash. Set max_duration=0 to disable, i.e., any duration is fine.
+          Maximum duration of data (in minutes) that can be extracted from a JAMS file. If more data is
+          available, a random slice with duration equal to the maximum will be extracted. Depending on
+          the amount of RAM available, representing a very large amount of data as frames can cause a
+          crash. Set max_duration=0 to disable, i.e., to fully process files with any duration.
+        max_sample_attempts : int
+          Maximum number of attempts to sample a segment that is not entirely non-zero frames
         """
 
         self.max_duration = 60 * max_duration # Convert to seconds
+        self.max_sample_attempts = max_sample_attempts
 
-        super().__init__(base_dir, splits, hop_length, sample_rate, data_proc, profile, num_frames,
-                         -1, split_notes, reset_data, store_data, save_data, save_loc, seed)
+        super().__init__(base_dir, splits, hop_length, sample_rate, None, profile, num_frames,
+                         None, split_notes, reset_data, store_data, save_data, save_loc, seed)
 
+    # TODO - delete if unnecessary
+    """
     def __getitem__(self, index):
-        """
-        Extending this method to remove the hop length from the ground-truth when sampling.
+        "/""
+        Extension of parent method which additionally removes hop length from ground-truth when sampling.
 
         Parameters
         ----------
@@ -50,21 +57,21 @@ class SymbolicTablature(TranscriptionDataset):
         ----------
         data : dict
           Dictionary containing the features and ground-truth data for the sampled track
-        """
+        "/""
 
         # Call the main __getitem__() function
         data = super().__getitem__(index)
 
-        # Remove sampling rate - it can cause problems if it is not an ndarray. Sample rate
-        # should be able to be inferred from the dataset object, if no warnings are thrown
         if tools.query_dict(data, tools.KEY_HOP):
+            # Remove hop length from ground-truth
             data.pop(tools.KEY_HOP)
 
         return data
+    """
 
-    def get_track_data(self, track_id, frame_start=None, frame_length=None, max_attempts=10):
+    def get_track_data(self, track_id, frame_start=None, frame_length=None):
         """
-        Get the ground truth for a track within a time interval, skipping feature extraction.
+        Get the ground truth for a track within an interval, skipping feature extraction.
 
         Parameters
         ----------
@@ -74,8 +81,6 @@ class SymbolicTablature(TranscriptionDataset):
           Frame with which to begin the slice
         frame_length : int
           Number of frames to take for the slice
-        max_attempts : int
-          Maximum number of attempts to sample non-zero frames
 
         Returns
         ----------
@@ -99,11 +104,15 @@ class SymbolicTablature(TranscriptionDataset):
             else:
                 return data
 
-        # If a specific starting frame was not provided
-        while frame_start is None or max_attempts:
-            # Determine the last frame at which we can start
-            sampling_end_point = data[tools.KEY_TABLATURE].shape[-1] - frame_length
-            # Sample a group of frames randomly
+        # Determine the last frame at which an interval can begin
+        sampling_end_point = data[tools.KEY_TABLATURE].shape[-1] - frame_length
+
+        # Keep track of the amount of sampling attempts
+        attempts_remaining = self.max_sample_attempts
+
+        # If a specific starting frame was not provided, sample one randomly
+        while frame_start is None or attempts_remaining:
+            # Sample a starting frame for the interval randomly
             frame_start = self.rng.randint(0, sampling_end_point) if sampling_end_point > 0 else 0
 
             # Determine where the sample of frames should end
@@ -112,12 +121,12 @@ class SymbolicTablature(TranscriptionDataset):
             # Check if non-silent frames were sampled
             if np.sum(data[tools.KEY_TABLATURE][..., frame_start : frame_end] != -1):
                 # No more attempts are needed
-                max_attempts = 0
+                attempts_remaining = 0
             else:
                 # Decrement the number of attempts
-                max_attempts -= 1
+                attempts_remaining -= 1
 
-        # Slice the remaining dictionary entries
+        # Slice all ground-truth to the sampled interval
         data = tools.slice_track(data, frame_start, frame_end, skip=[tools.KEY_FS, tools.KEY_HOP])
 
         return data
@@ -141,11 +150,11 @@ class SymbolicTablature(TranscriptionDataset):
         data = super().load(track)
 
         # If the track data is being instantiated, it will not have the tablature key
-        if tools.KEY_TABLATURE not in data.keys():
+        if not tools.query_dict(data, tools.KEY_TABLATURE):
             # Construct the path to the track's JAMS data
             jams_path = self.get_jams_path(track)
 
-            # Open up the JAMS data
+            # Load the JAMS data
             jam = jams.load(jams_path)
 
             # Get the total duration of the file
@@ -168,25 +177,39 @@ class SymbolicTablature(TranscriptionDataset):
             # Get the times for the start of each frame
             times = tools.get_frame_times(duration, self.sample_rate, self.hop_length)
 
-            # Convert the string-wise notes into a stacked multi pitch array
+            # Represent the string-wise notes as a stacked multi pitch array
             stacked_multi_pitch = tools.stacked_notes_to_stacked_multi_pitch(stacked_notes, times, self.profile)
 
-            # Convert the stacked multi pitch array into a single representation
-            data[tools.KEY_MULTIPITCH] = tools.stacked_multi_pitch_to_multi_pitch(stacked_multi_pitch)
-
             # Convert the stacked multi pitch array into tablature
-            data[tools.KEY_TABLATURE] = tools.stacked_multi_pitch_to_tablature(stacked_multi_pitch, self.profile)
+            tablature = tools.stacked_multi_pitch_to_tablature(stacked_multi_pitch, self.profile)
 
-            # Add the sampling rate and the hop length to the data
-            data[tools.KEY_FS], data[tools.KEY_HOP] = self.sample_rate, self.hop_length
+            # Convert the stacked multi pitch array into a single representation
+            multi_pitch = tools.stacked_multi_pitch_to_multi_pitch(stacked_multi_pitch)
+
+            # Add all relevant ground-truth to the dictionary
+            data.update({tools.KEY_FS : self.sample_rate,
+                         # TODO - delete if unnecessary
+                         #tools.KEY_HOP : self.hop_length,
+                         tools.KEY_TABLATURE : tablature,
+                         tools.KEY_MULTIPITCH : multi_pitch})
 
             if self.save_data:
                 # Get the appropriate path for saving the track data
                 gt_path = self.get_gt_dir(track)
 
                 # Save the data as a NumPy zip file
-                keys = (tools.KEY_FS, tools.KEY_HOP, tools.KEY_TABLATURE, tools.KEY_MULTIPITCH)
-                tools.save_pack_npz(gt_path, keys, data[tools.KEY_FS], data[tools.KEY_HOP],
-                                    data[tools.KEY_TABLATURE], data[tools.KEY_MULTIPITCH])
+                tools.save_dict_npz(gt_path, data)
 
         return data
+
+    def get_jams_path(self, track):
+        """
+        This method should be implemented by child classes.
+
+        Parameters
+        ----------
+        track : string
+          Dataset track name
+        """
+
+        return NotImplementedError

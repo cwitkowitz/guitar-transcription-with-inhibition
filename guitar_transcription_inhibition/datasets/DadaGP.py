@@ -14,20 +14,6 @@ class DadaGP(SymbolicTablature):
     Implements a wrapper for the DadaGP dataset.
     """
 
-    def __init__(self, base_dir=None, splits=None, hop_length=512, sample_rate=44100, data_proc=None,
-                 profile=None, num_frames=None, split_notes=False, reset_data=False, store_data=True,
-                 save_data=True, save_loc=None, seed=0, max_duration=0):
-        """
-        Initialize the dataset and establish parameter defaults in function signature.
-
-        Parameters
-        ----------
-        See SymbolicTablature class...
-        """
-
-        super().__init__(base_dir, splits, hop_length, sample_rate, data_proc, profile, num_frames, split_notes,
-                         reset_data, store_data, save_data, save_loc, seed, max_duration)
-
     def get_tracks(self, split):
         """
         Get the tracks associated with a dataset partition.
@@ -43,11 +29,11 @@ class DadaGP(SymbolicTablature):
           Names of tracks within the given partition
         """
 
-        # Determine which sub-splits to reference for the split
-        sub_splits = self.train_sub_splits() if split == 'train' else self.val_sub_splits()
-
-        # Obtain a list of all of the JAMS files
+        # Obtain a list of all the JAMS files
         jams_files = os.listdir(os.path.join(self.base_dir, 'jams'))
+
+        # Determine which sub-splits to reference for the split
+        sub_splits = self.val_sub_splits() if split == 'val' else self.train_sub_splits()
 
         # Reduce the list of files to those in the split and remove the JAMS extension
         tracks = [os.path.splitext(track)[0] for track in jams_files if self.get_first_track_char(track) in sub_splits]
@@ -61,7 +47,7 @@ class DadaGP(SymbolicTablature):
         Parameters
         ----------
         track : string
-          GuitarSet track name
+          DadaGP track name
 
         Returns
         ----------
@@ -82,7 +68,7 @@ class DadaGP(SymbolicTablature):
         Parameters
         ----------
         track : string
-          GuitarSet track name
+          DadaGP track name
 
         Returns
         ----------
@@ -116,7 +102,7 @@ class DadaGP(SymbolicTablature):
     @staticmethod
     def available_sub_splits():
         """
-        Obtain a list of all sub-splits (aplhanumeric).
+        Obtain a list of all sub-splits (alphanumeric).
 
         Returns
         ----------
@@ -135,7 +121,7 @@ class DadaGP(SymbolicTablature):
     @staticmethod
     def train_sub_splits():
         """
-        Obtain a list of sub-splits (aplhanumeric) that belong to the training set.
+        Obtain a list of sub-splits (alphanumeric) that belong to the training set.
 
         Returns
         ----------
@@ -151,7 +137,7 @@ class DadaGP(SymbolicTablature):
     @staticmethod
     def val_sub_splits():
         """
-        Obtain a list of sub-splits (aplhanumeric) that belong to the validation set.
+        Obtain a list of sub-splits (alphanumeric) that belong to the validation set.
 
         Returns
         ----------
@@ -166,8 +152,8 @@ class DadaGP(SymbolicTablature):
     @staticmethod
     def available_splits():
         """
-        Obtain a list of possible splits. Currently, the splits
-        are by training and validation partitions.
+        Obtain a list of possible splits. Currently, the
+        splits are by training and validation partitions.
 
         Returns
         ----------

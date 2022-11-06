@@ -10,109 +10,49 @@ import amt_tools.tools as tools
 import os
 
 
-class GuitarSetTabs(SymbolicTablature):
+class GuitarSetTabs(GuitarSet, SymbolicTablature):
     """
-    Implements a wrapper for the GuitarSet dataset tablature.
+    Implements a wrapper for GuitarSet symbolic tablature.
     """
 
-    def __init__(self, base_dir=None, splits=None, hop_length=512, sample_rate=44100, data_proc=None,
-                 profile=None, num_frames=None, split_notes=False, reset_data=False, store_data=True,
-                 save_data=True, save_loc=None, seed=0, max_duration=0):
+    def __init__(self, **kwargs):
         """
-        Initialize the dataset and establish parameter defaults in function signature.
+        Initialize the dataset.
 
         Parameters
         ----------
         See SymbolicTablature class...
         """
 
+        # Determine if the base directory argument was provided
+        base_dir = kwargs.pop('base_dir', None)
+
         # Select a default base directory path if none was provided
         if base_dir is None:
             # Use the same naming scheme as regular GuitarSet
             base_dir = os.path.join(tools.DEFAULT_DATASETS_DIR, GuitarSet.dataset_name())
 
-        super().__init__(base_dir, splits, hop_length, sample_rate, data_proc, profile, num_frames, split_notes,
-                         reset_data, store_data, save_data, save_loc, seed, max_duration)
+        # Update the argument in the collection
+        kwargs.update({'base_dir' : base_dir})
 
-    def get_tracks(self, split):
+        SymbolicTablature.__init__(self, **kwargs)
+
+    def load(self, track):
         """
-        Get the tracks associated with a dataset partition.
-
-        Parameters
-        ----------
-        split : string
-          Name of the partition from which to fetch tracks
-
-        Returns
-        ----------
-        tracks : list of strings
-          Names of tracks within the given partition
-        """
-
-        # Construct a path to GuitarSet's JAMS directory
-        jams_dir = os.path.join(self.base_dir, 'annotation')
-        # Extract the names of all the files in the directory
-        jams_paths = os.listdir(jams_dir)
-        # Sort all of the tracks alphabetically
-        jams_paths.sort()
-
-        # Remove the JAMS file extension from the file names
-        tracks = [os.path.splitext(path)[0] for path in jams_paths]
-
-        # Determine where the split starts within the sorted tracks
-        split_start = int(split) * 60
-        # Slice the appropriate tracks
-        tracks = tracks[split_start : split_start + 60]
-
-        return tracks
-
-    def get_jams_path(self, track):
-        """
-        Get the path to the annotations of a track.
+        Load the ground-truth from memory or generate it from scratch.
 
         Parameters
         ----------
         track : string
-          GuitarSet track name
+          Name of the track to load
 
         Returns
         ----------
-        jams_path : string
-          Path to the JAMS file of the specified track
+        data : dict
+          Dictionary with ground-truth for the track
         """
 
-        # Get the path to the annotations
-        jams_path = os.path.join(self.base_dir, 'annotation', f'{track}.{tools.JAMS_EXT}')
+        # Load the track data using the symbolic tablature protocol
+        data = SymbolicTablature.load(self, track)
 
-        return jams_path
-
-    @staticmethod
-    def available_splits():
-        """
-        Obtain a list of possible splits. Currently, the splits are by player,
-        but we could equally do genre, key, etc., as long as get_tracks() is adapted.
-
-        Returns
-        ----------
-        splits : list of strings
-          Player codes listed at beginning of file names
-        """
-
-        # Same splits as regular GuitarSet
-        splits = GuitarSet.available_splits()
-
-        return splits
-
-    @staticmethod
-    def download(save_dir):
-        """
-        Download GuitarSet to a specified location.
-
-        Parameters
-        ----------
-        save_dir : string
-          Directory in which to save the contents of GuitarSet
-        """
-
-        # Same steps as regular GuitarSet
-        GuitarSet.download(save_dir)
+        return data

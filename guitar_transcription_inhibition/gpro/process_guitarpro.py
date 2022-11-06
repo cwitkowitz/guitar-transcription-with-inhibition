@@ -31,7 +31,7 @@ def get_valid_files(base_dir, ignore_duplicates=True):
     base_dir : string
       Path to the base directory to recursively search
     ignore_duplicates : bool
-      Whether to remove exact duplicates and inferred duplicates
+      Whether to remove exact and inferred duplicates
 
     Returns
     ----------
@@ -92,7 +92,8 @@ def get_valid_files(base_dir, ignore_duplicates=True):
 def guitarpro_to_jams(gpro_path, jams_dir):
     """
     Convert a GuitarPro file to a JAMS file specifying notes for each track.
-    TODO - add others stuff (beats, key, tempo, etc.) to the JAMS files
+
+    TODO - add other stuff (beats, key, tempo, etc.) to the JAMS files
 
     Parameters
     ----------
@@ -127,7 +128,7 @@ def guitarpro_to_jams(gpro_path, jams_dir):
 
 if __name__ == '__main__':
     # Construct a path to the base directory
-    base_dir = '/home/rockstar/Desktop/Datasets/DadaGP'
+    base_dir = 'path/to/DadaGP'
 
     # Search the specified path for GuitarPro files
     tracked_files, tracked_paths = get_valid_files(base_dir)

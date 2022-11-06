@@ -14,14 +14,10 @@ The repository contains scripts to do the following:
 The repository is built on top of [amt-tools](https://github.com/cwitkowitz/amt-tools), a more general music transcription repository.
 
 ## Installation
-Clone the repository and install the requirements.
+Clone the repository, install the requirements, then install the package:
 ```
 git clone https://github.com/cwitkowitz/guitar-transcription-with-inhibition
 pip install -r guitar-transcription-with-inhibition/requirements.txt
-```
-
-(_Optional_) Install the repository for use within another project.
-```
 pip install -e guitar-transcription-with-inhibition/
 ```
 
