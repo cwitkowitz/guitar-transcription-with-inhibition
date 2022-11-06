@@ -79,8 +79,6 @@ def plot_inhibition_matrix(inhibition_matrix, v_bounds=None, include_axes=True, 
     """
     Static function for plotting an inhibition matrix heatmap.
 
-    TODO - move to visualization subpackage?
-
     Parameters
     ----------
     inhibition_matrix : ndarray (N x N)

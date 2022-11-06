@@ -1,7 +1,9 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from guitar_transcription_inhibition.inhibition import load_inhibition_matrix, plot_inhibition_matrix, trim_inhibition_matrix
+from guitar_transcription_inhibition.inhibition import load_inhibition_matrix, \
+                                                       plot_inhibition_matrix, \
+                                                       trim_inhibition_matrix
 
 import amt_tools.tools as tools
 
@@ -11,18 +13,20 @@ from matplotlib import rcParams
 import matplotlib.pyplot as plt
 import os
 
-# Construct a path for loading the inhibition matrix
-save_path = os.path.join('..', '..', 'generated', 'matrices', 'dadagp_silence_p128.npz')
 
+# Construct a path for loading the inhibition matrix
+save_path = os.path.join('..', '..', 'generated', 'matrices', '<MATRIX>.npz')
 # Load the inhibition matrix
 matrix = load_inhibition_matrix(save_path)
-# Initialize the profile
+
+# Initialize the default guitar profile
 profile = tools.GuitarProfile(num_frets=19)
+
 # Determine the number of strings and fret classes
 num_strings = profile.get_num_dofs()
 num_pitches = profile.num_pitches
 
-# Remove excessive frets from the inhibition matrix
+# Remove extra frets from the inhibition matrix
 matrix = trim_inhibition_matrix(matrix, num_strings, num_pitches, True)
 
 # Change the font and font size for the plot

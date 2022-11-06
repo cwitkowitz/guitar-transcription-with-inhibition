@@ -9,6 +9,7 @@ import amt_tools.tools as tools
 # Regular imports
 import os
 
+
 # Number of samples per second of audio
 sample_rate = 22050
 # Number of samples between frames

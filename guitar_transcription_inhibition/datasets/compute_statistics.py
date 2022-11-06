@@ -1,10 +1,10 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from guitar_transcription_inhibition.inhibition import load_inhibition_matrix, trim_inhibition_matrix
+from guitar_transcription_inhibition.inhibition import load_inhibition_matrix, \
+                                                       trim_inhibition_matrix
 from guitar_transcription_inhibition.models import LogisticTablatureEstimator
-from amt_tools.datasets import GuitarSet
-from amt_tools.features import CQT
+from guitar_transcription_inhibition.datasets import GuitarSetTabs
 
 import amt_tools.tools as tools
 
@@ -14,9 +14,9 @@ import torch
 import os
 
 
-def get_observation_statistics(tablature_dataset, profile, string_silence=False):
+def get_observation_statistics(tablature_dataset, profile, silence_activations=False):
     """
-    Count the number of times each string/fret occurs in a symbolic tablature dataset.
+    Count the number of times each string/fret pair occurs within a symbolic tablature dataset.
 
     Parameters
     ----------
@@ -24,7 +24,7 @@ def get_observation_statistics(tablature_dataset, profile, string_silence=False)
       Dataset containing symbolic tablature
     profile : TablatureProfile (tools/instrument.py)
       Instructions for organizing tablature into logistic activations
-    string_silence : bool
+    silence_activations : bool
       Whether to keep track of statistics for string silence
 
     Returns
@@ -32,14 +32,13 @@ def get_observation_statistics(tablature_dataset, profile, string_silence=False)
     total_frames : int
       Total number of frames encountered in the dataset
     occurrences : ndarray (S x C)
-      Total number of occurences for each string/fret
+      Total number of occurrences for each string/fret
       S - number of degrees of freedom (strings)
       C - number of classes
     """
 
-    # Determine the number of classes and the number of activations in the tablature
-    num_classes = profile.num_pitches + int(string_silence)
-    num_activations = profile.get_num_dofs() * num_classes
+    # Determine the number of distinct activations in the tablature
+    num_activations = profile.get_num_dofs() * (profile.num_pitches + int(silence_activations))
 
     # Initialize a counter for the total number of frames
     # and the total number of occurrences of each string/fret
@@ -50,7 +49,7 @@ def get_observation_statistics(tablature_dataset, profile, string_silence=False)
         # Extract the tablature
         tablature = track_data[tools.KEY_TABLATURE]
         # Convert the tablature to logistic activations
-        logistic = tools.tablature_to_logistic(tablature, profile, string_silence)
+        logistic = tools.tablature_to_logistic(tablature, profile, silence_activations)
 
         # Update the frame count
         total_frames += logistic.shape[-1]
@@ -60,16 +59,16 @@ def get_observation_statistics(tablature_dataset, profile, string_silence=False)
     # Reshape the occurrences so they can be indexed by string
     occurrences = np.reshape(occurrences, (profile.get_num_dofs(), -1))
 
-    if string_silence:
+    if silence_activations:
         # Move the silence classes to the final index
         occurrences = np.roll(occurrences, -1, axis=-1)
 
     return total_frames, occurrences
 
 
-def compute_balanced_class_weighting(tablature_dataset, profile, string_silence=False):
+def compute_balanced_class_weighting(tablature_dataset, profile, silence_activations=False):
     """
-    Obtain a weighting to balance the tablature classes.
+    Obtain the weighting necessary to balance the tablature classes.
 
     Parameters
     ----------
@@ -77,7 +76,7 @@ def compute_balanced_class_weighting(tablature_dataset, profile, string_silence=
       Dataset containing symbolic tablature
     profile : TablatureProfile (tools/instrument.py)
       Instructions for organizing tablature into logistic activations
-    string_silence : bool
+    silence_activations : bool
       Whether to keep track of statistics for string silence
 
     Returns
@@ -89,10 +88,10 @@ def compute_balanced_class_weighting(tablature_dataset, profile, string_silence=
     """
 
     # Determine the number of classes in the tablature
-    num_classes = profile.num_pitches + int(string_silence)
+    num_classes = profile.num_pitches + int(silence_activations)
 
     # Obtain the total number of frames and occurrences of each string/fret
-    total_frames, occurrences = get_observation_statistics(tablature_dataset, profile, string_silence)
+    total_frames, occurrences = get_observation_statistics(tablature_dataset, profile, silence_activations)
 
     # Compute the balanced weighting
     balanced_weighting = total_frames / (num_classes * occurrences)
@@ -102,7 +101,7 @@ def compute_balanced_class_weighting(tablature_dataset, profile, string_silence=
     return balanced_weighting
 
 
-def compute_dataset_inhibition_loss(tablature_dataset, inhibition_matrix, profile, string_silence=False):
+def compute_dataset_inhibition_loss(tablature_dataset, inhibition_matrix, profile, silence_activations=False):
     """
     Compute the inhibition loss over an entire symbolic
     tablature dataset, given a pre-existing inhibition matrix.
@@ -116,7 +115,7 @@ def compute_dataset_inhibition_loss(tablature_dataset, inhibition_matrix, profil
       N - number of unique string/fret activations
     profile : TablatureProfile (tools/instrument.py)
       Instructions for organizing tablature into logistic activations
-    string_silence : bool
+    silence_activations : bool
       Whether to keep track of statistics for string silence
 
     Returns
@@ -135,8 +134,8 @@ def compute_dataset_inhibition_loss(tablature_dataset, inhibition_matrix, profil
     for track_data in tablature_dataset:
         # Extract the tablature
         tablature = track_data[tools.KEY_TABLATURE]
-        # Convert the tablature to logistic activations and switch the dimensions
-        logistic = tools.tablature_to_logistic(tablature, profile, string_silence)
+        # Convert the tablature to logistic activations
+        logistic = tools.tablature_to_logistic(tablature, profile, silence_activations)
         # Switch the dimensions and convert the activations to a Tensor
         logistic = torch.Tensor(logistic.T)
 
@@ -170,7 +169,7 @@ def count_dataset_duplicate_pitches(tablature_dataset, profile):
     """
 
     # Initialize a list to keep track of each track's count
-    duplcates = []
+    duplicates = []
 
     # Loop through the symbolic tablature dataset
     for track_data in tablature_dataset:
@@ -181,49 +180,47 @@ def count_dataset_duplicate_pitches(tablature_dataset, profile):
         # Collapse the stack by summation
         multipitch = np.sum(stacked_multipitch, axis=-3)
         # Subtract one for single occurrences
-        multipitch = multipitch - 1
-        # Zero-out pitches which occurred once or not at all
-        multipitch[multipitch < 0] = 0
+        multipitch[multipitch > 0] = multipitch[multipitch > 0] - 1
 
         # Sum the remaining (duplicated) pitch counts and add to the tracked list
-        duplcates += [np.sum(multipitch)]
+        duplicates += [np.sum(multipitch)]
 
     # Average the loss across all tracks
-    total_duplicates = np.mean(duplcates)
+    total_duplicates = np.mean(duplicates)
 
     return total_duplicates
 
 
 if __name__ == '__main__':
-    # Initialize the default guitar profile
-    profile = tools.GuitarProfile(num_frets=19)
-
     # Processing parameters
     sample_rate = 22050
     hop_length = 512
-    dim_in = 192
 
-    # Create the data processing module
-    data_proc = CQT(sample_rate=sample_rate,
-                    hop_length=hop_length,
-                    n_bins=dim_in,
-                    bins_per_octave=24)
+    # Construct a path for loading the inhibition matrix
+    matrix_path = os.path.join('..', '..', 'generated', 'matrices', '<MATRIX>.npz')
+
+    # Initialize the default guitar profile
+    profile = tools.GuitarProfile(num_frets=19)
+
+    # Extract tablature parameters
+    num_strings = profile.get_num_dofs()
+    num_pitches = profile.num_pitches
 
     # All data/features cached here
-    gset_cache = os.path.join('../..', 'generated', 'data')
+    gset_cache = os.path.join('..', '..', 'generated', 'data')
 
-    # Initialize GuitarSet to compute statistics
-    tablature_dataset = GuitarSet(base_dir=None,
-                                  hop_length=hop_length,
-                                  sample_rate=sample_rate,
-                                  data_proc=data_proc,
-                                  profile=profile,
-                                  save_loc=gset_cache)
+    # Initialize GuitarSet tablature to compute statistics
+    tablature_dataset = GuitarSetTabs(base_dir=None,
+                                      hop_length=hop_length,
+                                      sample_rate=sample_rate,
+                                      profile=profile,
+                                      num_frames=None,
+                                      save_loc=gset_cache)
 
     # Nicer printing for arrays
     np.set_printoptions(suppress=True)
 
-    # Count the number of occurrences of each string/fret
+    # Count the number of occurrences of each string/fret pair
     total_frames, occurrences = get_observation_statistics(tablature_dataset, profile, True)
 
     print(f'Total Frames : {total_frames}')
@@ -234,17 +231,11 @@ if __name__ == '__main__':
 
     print(f'Balanced Weighting : \n{balanced_weighting}')
 
-    matrix_path = 'path/to/matrix'
-
-    # Load the inhibition matrix
+    # Load the specified inhibition matrix
     inhibition_matrix = load_inhibition_matrix(matrix_path)
 
-    # Extract tablature parameters
-    num_strings = profile.get_num_dofs()
-    num_pitches = profile.num_pitches
-
     # Trim the inhibition matrix to match the chosen profile
-    inhibition_matrix = trim_inhibition_matrix(inhibition_matrix, num_strings, num_pitches, silent_string=True)
+    inhibition_matrix = trim_inhibition_matrix(inhibition_matrix, num_strings, num_pitches, silence_activations=True)
 
     # Compute the inhibition loss on the full dataset
     inhibition_loss = compute_dataset_inhibition_loss(tablature_dataset, inhibition_matrix, profile, True)

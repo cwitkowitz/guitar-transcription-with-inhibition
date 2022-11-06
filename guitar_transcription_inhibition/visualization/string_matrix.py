@@ -11,6 +11,7 @@ from matplotlib import rcParams
 
 import matplotlib.pyplot as plt
 
+
 # Initialize the default guitar profile
 profile = tools.GuitarProfile(num_frets=19)
 
@@ -25,7 +26,7 @@ rcParams['font.size'] = 20
 fig = plt.figure(figsize=(10, 10), tight_layout=True)
 
 # Plot the inhibition matrix
-_ = plot_inhibition_matrix(matrix, fig=fig)
+fig = plot_inhibition_matrix(matrix, fig=fig)
 
 # Call this to stop execution
 plt.show(block=True)
