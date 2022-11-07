@@ -1,8 +1,8 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
+from .tablature_layers import LogisticTablatureEstimator
 from amt_tools.models import TabCNN, OnlineLanguageModel
-from . import LogisticTablatureEstimator
 
 import amt_tools.tools as tools
 
@@ -43,14 +43,15 @@ class TabCNNLogistic(TabCNN):
     Implements TabCNN with a logistic output layer instead of the classic (softmax) output layer.
     """
 
-    def __init__(self, dim_in, profile, in_channels, model_complexity=1, matrix_path=None,
-                 silence_activations=False, lmbda=1, device='cpu'):
+    def __init__(self, dim_in, profile, in_channels, model_complexity=1,
+                 matrix_path=None, silence_activations=False, lmbda=1, device='cpu'):
         """
         Initialize the model and replace the final layer.
 
         Parameters
         ----------
         See TabCNN class for others...
+
         matrix_path : str or None (optional)
           Path to inhibition matrix
         silence_activations : bool
@@ -172,8 +173,8 @@ class TabCNNLogisticRecurrent(TabCNNLogistic):
     Implements TabCNNLogistic with a recurrent layer inserted before output layer.
     """
 
-    def __init__(self, dim_in, profile, in_channels, model_complexity=1, matrix_path=None,
-                 silence_activations=False, lmbda=1, device='cpu'):
+    def __init__(self, dim_in, profile, in_channels, model_complexity=1,
+                 matrix_path=None, silence_activations=False, lmbda=1, device='cpu'):
         """
         Initialize the model and insert the recurrent layer.
 

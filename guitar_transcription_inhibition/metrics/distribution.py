@@ -12,7 +12,7 @@ import numpy as np
 
 KEY_FA_ERRORS = 'false_alarm_errors'
 KEY_DP_ERRORS = 'duplicate_pitch_errors'
-KEY_INH_SCORE = 'inhibition_score'
+KEY_INH_SCORE = 'inhibition'
 
 
 class FalseAlarmErrors(TablatureEvaluator):

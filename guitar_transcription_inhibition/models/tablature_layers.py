@@ -1,7 +1,7 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from ..inhibition import load_inhibition_matrix, trim_inhibition_matrix
+from guitar_transcription_inhibition.inhibition import load_inhibition_matrix, trim_inhibition_matrix
 from amt_tools.models import TranscriptionModel, SoftmaxGroups, LogisticBank
 
 import amt_tools.tools as tools
@@ -11,6 +11,9 @@ import torch
 
 
 class TablatureEstimator(TranscriptionModel):
+    """
+    Standalone tablature estimation wrapper.
+    """
     def __init__(self, dim_in, profile, device='cpu'):
         """
         Initialize the tablature layer as a TranscriptionModel.
@@ -20,7 +23,6 @@ class TablatureEstimator(TranscriptionModel):
         See TranscriptionModel class...
         """
 
-        # Call TranscriptionModel.__init__()
         super().__init__(dim_in, profile, 1, 1, 1, device)
 
         # Initialize a null tablature output layer
@@ -28,8 +30,8 @@ class TablatureEstimator(TranscriptionModel):
 
     def pre_proc(self, batch):
         """
-        Treat the ground-truth multipitch as the features, extracting the
-        ground-truth multipitch from the ground-truth tablature if necessary.
+        Treat the ground-truth multipitch as features, inferring
+        from the ground-truth tablature if necessary.
 
         Parameters
         ----------
@@ -42,8 +44,8 @@ class TablatureEstimator(TranscriptionModel):
           Dictionary containing ground-truth multipitch as features
         """
 
-        # If there are no pre-existing features, add in the ground-truth multipitch
         if not tools.query_dict(batch, tools.KEY_FEATS):
+            # Add in the ground-truth multipitch if there are no pre-existing features
             if tools.query_dict(batch, tools.KEY_MULTIPITCH):
                 # Extract the multipitch from the ground-truth
                 multipitch = batch[tools.KEY_MULTIPITCH]
@@ -58,8 +60,11 @@ class TablatureEstimator(TranscriptionModel):
                 # This will cause an error
                 multipitch = None
 
-            # Flip the dimensions of the multipitch and add as features to the dictionary
+            # Flip the dimensions of the multipitch and add to the dictionary as features
             batch[tools.KEY_FEATS] = multipitch.transpose(-1, -2)
+
+        # Make sure all data is on correct device
+        batch = tools.dict_to_device(batch, self.device)
 
         return batch
 
@@ -80,7 +85,7 @@ class TablatureEstimator(TranscriptionModel):
         output : dict w/ tablature Tensor (B x T x O)
           Dictionary containing tablature output
           B - batch size,
-          T - number of time steps (frames)
+          T - number of frames
           O - tablature output dimensionality
         """
 
@@ -160,32 +165,8 @@ class ClassicTablatureEstimator(TablatureEstimator):
         num_groups = self.profile.get_num_dofs()
         num_classes = self.profile.num_pitches + 1
 
-        # Set the tablature layer to Softmax groups
+        # Set the tablature layer to softmax groups
         self.tablature_layer = SoftmaxGroups(dim_in, num_groups, num_classes)
-
-    def pre_proc(self, batch):
-        """
-        Perform common symbolic tablature transcription pre-processing,
-        and add all data to the specified device.
-
-        Parameters
-        ----------
-        batch : dict
-          Dictionary containing ground-truth tablature (and potentially multipitch) for a group of tracks
-
-        Returns
-        ----------
-        batch : dict
-          Dictionary containing ground-truth multipitch as features
-        """
-
-        # Perform pre-processing steps of parent class
-        batch = super().pre_proc(batch)
-
-        # Make sure all data is on correct device
-        batch = tools.dict_to_device(batch, self.device)
-
-        return batch
 
     def post_proc(self, batch):
         """
@@ -206,7 +187,7 @@ class ClassicTablatureEstimator(TablatureEstimator):
         # Calculate tablature loss
         output = super().post_proc(batch)
 
-        # Finalize the tablature estimation
+        # Finalize predictions by choosing maximally activated tablature class
         output[tools.KEY_TABLATURE] = self.tablature_layer.finalize_output(output[tools.KEY_TABLATURE])
 
         return output
@@ -214,7 +195,7 @@ class ClassicTablatureEstimator(TablatureEstimator):
 
 class LogisticTablatureEstimator(TablatureEstimator):
     """
-    Multi-unit (string/fret) logistic regression tablature layer with pairwise inhibition.
+    Multi-unit (string/fret) logistic tablature layer with pairwise inhibition.
     """
     def __init__(self, dim_in, profile, matrix_path=None, silence_activations=False, lmbda=1, device='cpu'):
         """
@@ -223,6 +204,7 @@ class LogisticTablatureEstimator(TablatureEstimator):
         Parameters
         ----------
         See TranscriptionModel class for others...
+
         matrix_path : str or None (optional)
           Path to inhibition matrix
         silence_activations : bool
@@ -233,29 +215,26 @@ class LogisticTablatureEstimator(TablatureEstimator):
 
         super().__init__(dim_in, profile, device)
 
+        self.silence_activations = silence_activations
+        self.lmbda = lmbda
+
         # Extract tablature parameters
         num_strings = self.profile.get_num_dofs()
         num_pitches = self.profile.num_pitches
 
         # Calculate output dimensionality
-        dim_out = num_strings * num_pitches
+        dim_out = num_strings * (num_pitches + int(self.silence_activations))
 
-        self.silence_activations = silence_activations
-        self.lmbda = lmbda
-
-        if self.silence_activations:
-            # Account for no-string activations
-            dim_out += num_strings
-
-        # Set the tablature layer to a Logistic bank
+        # Set the tablature layer to a logistic bank
         self.tablature_layer = LogisticBank(dim_in, dim_out)
 
         # Make sure the device is valid before creating the inhibition matrix
         self.change_device()
 
         if matrix_path is None:
-            # Default the inhibition matrix if it does not exist (inhibit string groups)
-            self.inhibition_matrix = self.initialize_default_matrix(self.profile, self.silence_activations).to(self.device)
+            # Default the inhibition matrix if it does not exist (inhibit same-string pairs)
+            self.inhibition_matrix = self.initialize_default_matrix(self.profile,
+                                                                    self.silence_activations).to(self.device)
         else:
             # Load the inhibition matrix at the specified path
             self.set_inhibition_matrix(matrix_path)
@@ -263,8 +242,7 @@ class LogisticTablatureEstimator(TablatureEstimator):
     @staticmethod
     def initialize_default_matrix(profile, silence_activations):
         """
-        Calculate the inhibition loss for frame-level logistic
-        tablature predictions, given a pre-existing inhibition matrix.
+        Initialize an inhibition matrix which only inhibits same-string pairs.
 
         Parameters
         ----------
@@ -285,13 +263,9 @@ class LogisticTablatureEstimator(TablatureEstimator):
         num_pitches = profile.num_pitches
 
         # Calculate output dimensionality
-        dim_out = num_strings * num_pitches
+        dim_out = num_strings * (num_pitches + int(silence_activations))
 
-        if silence_activations:
-            # Account for no-string activations
-            dim_out += num_strings
-
-        # Create a identity matrix with size equal to number of strings
+        # Create an identity matrix with size equal to number of strings
         inhibition_matrix = torch.eye(num_strings)
         # Repeat the matrix along both dimensions for each pitch
         inhibition_matrix = torch.repeat_interleave(inhibition_matrix, num_pitches + int(silence_activations), dim=0)
@@ -318,15 +292,18 @@ class LogisticTablatureEstimator(TablatureEstimator):
         # Load the inhibition matrix at the given path
         inhibition_matrix = load_inhibition_matrix(matrix_path)
         # Trim the inhibition matrix to match the chosen profile
-        inhibition_matrix = torch.Tensor(trim_inhibition_matrix(inhibition_matrix, num_strings, num_pitches, self.silence_activations))
+        inhibition_matrix = torch.Tensor(trim_inhibition_matrix(inhibition_matrix,
+                                                                num_strings=num_strings,
+                                                                num_pitches=num_pitches,
+                                                                silence_activations=self.silence_activations))
 
-        # Initialize the inhibition matrix and add it to the specified device
+        # Set the inhibition matrix and add it to the specified device
         self.inhibition_matrix = inhibition_matrix.to(self.device)
 
     def pre_proc(self, batch):
         """
-        Perform common symbolic tablature transcription pre-processing, re-organize the
-        ground-truth as logistic activations, and add all data to the specified device.
+        Perform common symbolic tablature transcription pre-processing,
+        and re-organize the ground-truth as logistic activations.
 
         Parameters
         ----------
@@ -343,15 +320,10 @@ class LogisticTablatureEstimator(TablatureEstimator):
         batch = super().pre_proc(batch)
 
         if tools.query_dict(batch, tools.KEY_TABLATURE):
-            # Extract the tablature from the ground-truth
-            tablature = batch[tools.KEY_TABLATURE]
-            # Convert the tablature to logistic activations
-            logistic = tools.tablature_to_logistic(tablature, self.profile, silence=self.silence_activations)
-            # Add back to the ground-truth
-            batch[tools.KEY_TABLATURE] = logistic
-
-        # Make sure all data is on correct device
-        batch = tools.dict_to_device(batch, self.device)
+            # Convert ground-truth tablature to logistic format
+            batch[tools.KEY_TABLATURE] = tools.tablature_to_logistic(batch[tools.KEY_TABLATURE],
+                                                                     profile=self.profile,
+                                                                     silence=self.silence_activations)
 
         return batch
 
@@ -364,7 +336,7 @@ class LogisticTablatureEstimator(TablatureEstimator):
         Parameters
         ----------
         logistic_tablature : tensor (B x T x N)
-          Tensor of tablature activations (e.g. string/fret combinations)
+          Tablature activations in logistic format
           B - batch size
           T - number of frames
           N - number of unique string/fret activations
@@ -389,8 +361,8 @@ class LogisticTablatureEstimator(TablatureEstimator):
         # Apply the inhibition matrix weights to the outer product
         inhibition_loss = inhibition_matrix * outer
 
-        # Average the inhibition loss over the batch and frame dimension
-        inhibition_loss = torch.mean(torch.mean(inhibition_loss, axis=0), axis=0)
+        # Average the inhibition loss over the batch and then frame dimension
+        inhibition_loss = torch.mean(torch.mean(inhibition_loss, dim=0), dim=0)
 
         # Divide by two, since every pair will have a duplicate entry, and sum across pairs
         inhibition_loss = torch.sum(inhibition_loss / 2)
@@ -434,9 +406,9 @@ class LogisticTablatureEstimator(TablatureEstimator):
         if total_loss:
             # Compute the inhibition loss for the estimated tablature
             inhibition_loss = self.calculate_inhibition_loss(tablature_est, self.inhibition_matrix)
-            # Add the scaled inhibition loss to the tracked loss dictionary
+            # Add the inhibition loss to the tracked loss dictionary
             loss[tools.KEY_LOSS_INH] = inhibition_loss
-            # Add the inhibition loss to the total loss
+            # Add the scaled inhibition loss to the total loss
             total_loss += self.lmbda * inhibition_loss
 
         # Determine if loss is being tracked

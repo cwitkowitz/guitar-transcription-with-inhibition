@@ -1,10 +1,9 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
+from guitar_transcription_inhibition.metrics import FalseAlarmErrors, InhibitionLoss
 from guitar_transcription_inhibition.inhibition import load_inhibition_matrix
-from guitar_transcription_inhibition.metrics import FalseAlarmErrors, \
-                                                    InhibitionLoss
-from guitar_transcription_inhibition.models import TabCNNLogistic
+from guitar_transcription_inhibition.models import TabCNNLogisticRecurrent
 from amt_tools.datasets import GuitarSet
 from amt_tools.features import CQT
 
@@ -111,8 +110,8 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
                                            SoftmaxAccuracy(),
                                            FalseAlarmErrors(profile=profile),
                                            InhibitionLoss(profile=profile,
-                                                          matrices={'l_inh': standard_matrix,
-                                                                    'l_inh+': boosted_matrix},
+                                                          matrices={'l_inh_std': standard_matrix,
+                                                                    'l_inh_plus': boosted_matrix},
                                                           silence_activations=silence_activations)])
 
     # Keep all cached data/features here
@@ -130,7 +129,7 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
         tools.seed_everything(seed)
 
         # Set validation patterns for logging during training
-        validation_evaluator.set_patterns(['loss', 'f1', 'tdr', 'acc', 'error'])
+        validation_evaluator.set_patterns(['loss', 'f1', 'tdr', 'acc', 'error', 'inh'])
 
         # Allocate training/testing splits
         train_splits = GuitarSet.available_splits()
@@ -194,13 +193,13 @@ def six_fold_cross_val(sample_rate, hop_length, num_frames, iterations, checkpoi
         print('Initializing model...')
 
         # Initialize a new instance of the model
-        tabcnn = TabCNNLogistic(dim_in=data_proc.get_feature_size(),
-                                profile=profile,
-                                in_channels=data_proc.get_num_channels(),
-                                matrix_path=matrix_path,
-                                silence_activations=silence_activations,
-                                lmbda=lmbda,
-                                device=gpu_id)
+        tabcnn = TabCNNLogisticRecurrent(dim_in=data_proc.get_feature_size(),
+                                         profile=profile,
+                                         in_channels=data_proc.get_num_channels(),
+                                         matrix_path=matrix_path,
+                                         silence_activations=silence_activations,
+                                         lmbda=lmbda,
+                                         device=gpu_id)
         tabcnn.change_device()
         tabcnn.train()
 
