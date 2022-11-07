@@ -1,8 +1,9 @@
 # Author: Frank Cwitkowitz <fcwitkow@ur.rochester.edu>
 
 # My imports
-from ..models import LogisticTablatureEstimator
-from amt_tools.evaluate import TablatureEvaluator
+from guitar_transcription_inhibition.inhibition import trim_inhibition_matrix
+from guitar_transcription_inhibition.models import LogisticTablatureEstimator
+from amt_tools.evaluate import TablatureEvaluator, LossWrapper
 
 import amt_tools.tools as tools
 
@@ -44,7 +45,7 @@ class FalseAlarmErrors(TablatureEvaluator):
         logistic_ref = tools.tablature_to_logistic(reference, self.profile, silence=False)
 
         # Compute the number of false alarm errors
-        false_alarm_errors = np.sum(np.logical_and(logistic_est, np.logical_not(logistic_ref)))
+        false_alarm_errors = np.sum(np.logical_and(logistic_est, np.logical_not(logistic_ref)), dtype=tools.FLOAT)
 
         # Convert the tablature into stacked multi pitch representations
         stacked_multi_pitch_est = tools.tablature_to_stacked_multi_pitch(estimated, self.profile)
@@ -76,12 +77,13 @@ class FalseAlarmErrors(TablatureEvaluator):
         return results
 
 
-class InhibitionLoss(TablatureEvaluator):
+class InhibitionLoss(TablatureEvaluator, LossWrapper):
     """
     Implements an evaluator for measuring the inhibition loss of final predictions.
     """
 
-    def __init__(self, profile, matrices, silence_activations, key=None, save_dir=None, patterns=None, verbose=False):
+    def __init__(self, profile, matrices, silence_activations, unpack_key=None,
+                 results_key=None, save_dir=None, patterns=None, verbose=False):
         """
         Initialize parameters for the evaluator.
 
@@ -91,27 +93,26 @@ class InhibitionLoss(TablatureEvaluator):
 
         matrices : dict (str -> inhibition_matrix : tensor (N x N))
           Dictionary containing all inhibition matrices to evaluate
+        silence_activations : bool
+          Whether the silent string is explicitly modeled as an activation
         """
 
-        super().__init__(profile, key, save_dir, patterns, verbose)
+        super().__init__(profile, unpack_key, results_key, save_dir, patterns, verbose)
 
-        self.matrices = matrices
+        self.matrices = tools.dict_to_tensor(matrices)
         self.silence_activations = silence_activations
 
-    def evaluate(self, estimated, reference):
+    def evaluate(self, estimated, reference=None):
         """
-        Calculate the inhibition losses for the estimated tablature.
+        Calculate the inhibition loss(es) for the estimated tablature.
 
         Parameters
         ----------
-        estimated : ndarray (S x F x T)
-          Array of multiple discrete pitch activation maps
-          S - number of slices in stack
-          F - number of discrete pitches
+        estimated : ndarray (S x T)
+          Array of class membership for multiple degrees of freedom (e.g. strings)
+          S - number of strings or degrees of freedom
           T - number of frames
-        reference (unused) : ndarray (S x F x T)
-          Array of multiple discrete pitch activation maps
-          Dimensions same as estimated
+        reference : irrelevant
 
         Returns
         ----------
@@ -119,26 +120,26 @@ class InhibitionLoss(TablatureEvaluator):
           Dictionary containing number of duplicate pitch errors
         """
 
-        # Extract the final tablature predictions
-        # TODO - add to pre_proc?
-        logistic_est = tools.stacked_multi_pitch_to_logistic(estimated, self.profile, self.silence_activations)
-        # Switch the frame and activation dimension, and add a batch dimension
-        logistic_est = np.expand_dims(logistic_est.T, axis=0)
-        # Convert the predictions to Tensor format
-        logistic_est = tools.array_to_tensor(logistic_est)
+        # Extract the final tablature predictions and convert from tablature to logistic format
+        logistic_est = tools.tablature_to_logistic(estimated, self.profile, silence=self.silence_activations)
+        # Switch the frame and activation dimension, add a batch dimension, and convert to tensor
+        logistic_est = tools.array_to_tensor(np.expand_dims(logistic_est.T, axis=0))
 
-        # Initialize a new dictionary to hold various inhibition scores
+        # Initialize a new dictionary to hold various inhibition losses
         inhibition_losses = dict()
 
         # Loop through each inhibition matrix provided
         for matrix_key in self.matrices.keys():
-            # Unpack the matrix from the dictionary
-            inhibition_matrix = self.matrices[matrix_key]
-            # Add the predictions to the appropriate device
-            logistic_est = logistic_est.to(inhibition_matrix.device)
-            # Compute the inhibition score on the final predictions
+            # Unpack the matrix from the dictionary and trim to match the specified profile
+            inhibition_matrix = trim_inhibition_matrix(self.matrices[matrix_key],
+                                                       num_strings=self.profile.get_num_dofs(),
+                                                       num_pitches=self.profile.num_pitches,
+                                                       silence_activations=self.silence_activations)
+            # Make sure the inhibition matrix is on the appropriate device
+            inhibition_matrix = inhibition_matrix.to(logistic_est.device)
+            # Compute the inhibition loss on the final predictions
             inhibition_loss = LogisticTablatureEstimator.calculate_inhibition_loss(logistic_est, inhibition_matrix)
-            # Add the score to the dictionary
+            # Add the inhibition loss to the dictionary
             inhibition_losses[matrix_key] = inhibition_loss.item()
 
         # Package the result into a dictionary
