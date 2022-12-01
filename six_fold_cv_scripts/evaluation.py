@@ -48,6 +48,9 @@ output_dir = sorted([dir for dir in os.listdir(experiment_dir) if dir.isdigit()]
 # Specify the path to an output file to log results
 output_path = os.path.join(experiment_dir, output_dir, f'six-fold-{identifier}.json')
 
+# Define expected path for calculated features and ground-truth
+gset_cache = os.path.join('..', 'generated', 'data')
+
 # Initialize an empty dictionary to hold the average results across folds
 results = dict()
 
@@ -111,9 +114,6 @@ for k in range(6):
                                                           )])
     # Allocate the testing split for the fold
     test_splits = [GuitarSet.available_splits().pop(k)]
-
-    # Define expected path for calculated features and ground-truth
-    gset_cache = os.path.join('..', 'generated', 'data')
 
     # Create a dataset corresponding to the testing partition
     gset_test = GuitarSet(base_dir=None,

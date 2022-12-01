@@ -3,8 +3,8 @@
 # My imports
 from guitar_transcription_inhibition.inhibition import InhibitionMatrixTrainer, \
                                                        plot_inhibition_matrix
-from guitar_transcription_inhibition.models import TabCNNRecurrent
-from amt_tools.models import TabCNN
+from amt_tools.datasets import GuitarSet
+from amt_tools.features import CQT
 
 import amt_tools.tools as tools
 
@@ -19,7 +19,7 @@ import os
 
 def plot_logistic_activations(activations, times=None, v_bounds=None, include_axes=True, labels=None, fig=None):
     """
-    Static function for plotting a heatmap for logistic activations.
+    Static function for plotting an activation map for logistic activations.
 
     Parameters
     ----------
@@ -30,7 +30,7 @@ def plot_logistic_activations(activations, times=None, v_bounds=None, include_ax
     times : ndarray or None (Optional)
       Times corresponding to frames
     v_bounds : list, ndarray, or None (Optional)
-      Boundaries for plotting the heatmap
+      Boundaries for plotting the activations
     include_axes : bool
       Whether to include the axis in the plot
     labels : list of string or None (Optional)
@@ -41,7 +41,7 @@ def plot_logistic_activations(activations, times=None, v_bounds=None, include_ax
     Returns
     ----------
     fig : matplotlib Figure object
-      A handle for the figure used to plot the inhibition matrix
+      A handle for the figure used to plot the activation map
     """
 
     if fig is None:
@@ -49,6 +49,7 @@ def plot_logistic_activations(activations, times=None, v_bounds=None, include_ax
         fig = tools.initialize_figure(interactive=False)
 
     if v_bounds is None:
+        # Default the vertical boundaries
         v_bounds = [None, None]
 
     # Obtain a handle for the figure's current axis
@@ -57,13 +58,17 @@ def plot_logistic_activations(activations, times=None, v_bounds=None, include_ax
     # Determine the number of unique activations and frames
     num_activations, num_frames = activations.shape
 
-    # Check if a heatmap has already been plotted
+    # Set the extent for marking the axes of the image
+    extent = [0, num_frames if times is None else times[-1], num_activations, 0]
+
+    # Check if an activation map has already been plotted
     if len(ax.images):
-        # Update the heatmap with the new data
+        # Update the activation map with the new data
         ax.images[0].set_data(activations)
+        # Update the image extent
+        ax.images[0].set_extent(extent)
     else:
-        extent = [0, num_frames if times is None else times[-1], num_activations, 0]
-        # Plot the inhibition matrix as a heatmap
+        # Plot the inhibition matrix as a activation map
         ax.imshow(activations, extent=extent, vmin=v_bounds[0], vmax=v_bounds[1])
 
     if include_axes:
@@ -121,26 +126,32 @@ def visualize(model, tablature_dataset, save_dir, config=[0, 0, 1], lhood_select
     # Make sure the save directory exists
     os.makedirs(save_dir, exist_ok=True)
 
-    # Indicate whether the raw activations will include a silent string activation
-    silent_class = True if isinstance(model, TabCNN) or \
-                           isinstance(model, TabCNNRecurrent) else model.silence_activations
+    try:
+        # Attempt to check the respective parameter value of the model
+        silence_activations = model.tablature_layer.silence_activations
+    except:
+        # Default this indication of modeling activations for silence
+        # in case the attribute does not exist within the model
+        silence_activations = True
 
     # Initialize a matrix trainer for visualizing the pairwise likelihood of activations
-    trainer = InhibitionMatrixTrainer(model.profile, silent_string=silent_class, boost=1)
+    trainer = InhibitionMatrixTrainer(model.profile, silence_activations=silence_activations, boost=1)
 
     # Determine the parameters of the tablature
     num_strings = model.profile.get_num_dofs()
-    num_classes = model.profile.num_pitches + int(silent_class)
+    num_classes = model.profile.num_pitches + int(silence_activations)
 
-    # Loop through all tracks in the validation set
+    # Loop through all tracks in the provided tablature set
     for n, track_data in enumerate(tablature_dataset):
         # Extract the track name to use for save paths
         track_name = track_data[tools.KEY_TRACK]
 
         # Convert the track data to Tensors and add a batch dimension
         track_data = tools.dict_unsqueeze(tools.dict_to_tensor(track_data))
-        # Run the track through the model without completing pre-processing steps
-        raw_predictions = model(model.pre_proc(track_data)[tools.KEY_FEATS])
+        # Complete pre-processing steps
+        track_data = model.pre_proc(track_data)
+        # Run the track data through the model
+        raw_predictions = model(track_data[tools.KEY_FEATS])
         # Throw away tracked gradients so the predictions can be copied
         raw_predictions = tools.dict_detach(raw_predictions)
 
@@ -168,7 +179,7 @@ def visualize(model, tablature_dataset, save_dir, config=[0, 0, 1], lhood_select
         # Extract the tablature activations and convert to NumPy array
         final_activations = tools.tensor_to_array(final_activations[tools.KEY_TABLATURE])
         # Convert the final tablature predictions to logistic activations
-        final_activations = tools.tablature_to_logistic(final_activations, model.profile, silent_class)
+        final_activations = tools.tablature_to_logistic(final_activations, model.profile, silence_activations)
 
         # Process the chosen activations for the pairwise likelihoods
         if lhood_select == 0:
@@ -242,6 +253,54 @@ def visualize(model, tablature_dataset, save_dir, config=[0, 0, 1], lhood_select
 
 
 if __name__ == '__main__':
-    # TODO - add working example
+    # Number of samples per second of audio
+    sample_rate = 22050
+    # Number of samples between frames
+    hop_length = 512
+    # Flag to re-acquire ground-truth data and re-calculate features
+    reset_data = False
+    # Choose the GPU on which to perform evaluation
+    gpu_id = 0
+    # Select the fold to visualize
+    fold = 0
 
-    print()
+    # Define the path to the model
+    model_path = os.path.join(tools.HOME, 'Desktop', 'guitar-transcription-with-inhibition',
+                              'generated', 'experiments', 'Logistic_dadagp+_l10', 'models',
+                              f'fold-{fold}', 'model-11000.pt')
+
+    # Initialize a device pointer for loading the model
+    device = torch.device(f'cuda:{gpu_id}' if torch.cuda.is_available() else 'cpu')
+
+    # Load the model onto the chosen device
+    model = torch.load(model_path, map_location=device)
+    model.change_device(gpu_id)
+
+    # Construct a path to the directory to save visualiations
+    save_dir = os.path.join('..', '..', 'generated', 'visualization', 'activations')
+    # Make sure the save directory exists
+    os.makedirs(save_dir, exist_ok=True)
+
+    # Create a CQT feature extraction module spanning 8 octaves w/ 2 bins per semitone
+    data_proc = CQT(sample_rate=sample_rate, hop_length=hop_length, n_bins=192, bins_per_octave=24)
+
+    # Allocate the testing split for the fold
+    test_splits = [GuitarSet.available_splits().pop(fold)]
+
+    # Define expected path for calculated features and ground-truth
+    gset_cache = os.path.join('..', 'generated', 'data')
+
+    # Initialize GuitarSet tablature to compute statistics
+    tablature_dataset = GuitarSet(base_dir=None,
+                                  splits=test_splits,
+                                  hop_length=hop_length,
+                                  sample_rate=sample_rate,
+                                  num_frames=None,
+                                  data_proc=data_proc,
+                                  profile=model.profile,
+                                  reset_data=reset_data,
+                                  store_data=False,
+                                  save_loc=gset_cache)
+
+    # Visualize the activations for the fold
+    visualize(model, tablature_dataset, save_dir, config=[1, 1, 1], lhood_select=2)
