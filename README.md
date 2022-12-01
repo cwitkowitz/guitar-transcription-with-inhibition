@@ -1,17 +1,13 @@
-## Guitar Transcription w/ Inhibition
-Code for the paper [A Data-Driven Methodology for Considering Feasibility and Pairwise Likelihood in Deep Learning Based Guitar Tablature Transcription Systems](https://arxiv.org/abs/2204.08094).
-The repository contains scripts to do the following:
-* Generate [JAMS](https://jams.readthedocs.io/en/stable/) files from [GuitarPro](https://www.guitar-pro.com/) data using [PyGuitarPro](https://pyguitarpro.readthedocs.io/en/stable/)
-* Create a matrix of inhibition weights from a collection of tablature annotations (e.g., [DadaGP](https://github.com/dada-bots/dadaGP))
-* Implements our proposed output layer formulation with inhibition
-  * Interchangeable with [TabCNN](https://archives.ismir.net/ismir2019/paper/000033.pdf)'s output layer formulation
-* Run six-fold cross-validation experiments on [GuitarSet](https://guitarset.weebly.com/)
-* Train a (realtime capable) model for deployment
-* Run inference (offline/online/realtime) on a specific track
-* Run inference on audio from microphone
-* and more...
+## Guitar Transcription with Inhibition
+Code for the paper "[A Data-Driven Methodology for Considering Feasibility and Pairwise Likelihood in Deep Learning Based Guitar Tablature Transcription Systems](https://arxiv.org/abs/2204.08094)".
+This repository contains scripts which do the following (and more):
+* Acquire annotations in [JAMS](https://jams.readthedocs.io/en/stable/) format from [GuitarPro](https://www.guitar-pro.com/) data using [PyGuitarPro](https://pyguitarpro.readthedocs.io/en/stable/)
+* Create a matrix of inhibition weights from a collection of tablature (e.g., [DadaGP](https://github.com/dada-bots/dadaGP))
+* Implement the proposed tablature output layer formulation with inhibition
+  * Interchangeable with the [TabCNN](https://archives.ismir.net/ismir2019/paper/000033.pdf) output layer formulation
+* Perform six-fold cross-validation experiments on [GuitarSet](https://guitarset.weebly.com/)
 
-The repository is built on top of [amt-tools](https://github.com/cwitkowitz/amt-tools), a more general music transcription repository.
+The repository heavily utilizes [amt-tools](https://github.com/cwitkowitz/amt-tools), a more general music transcription repository.
 
 ## Installation
 Clone the repository, install the requirements, then install the package:
@@ -22,51 +18,62 @@ pip install -e guitar-transcription-with-inhibition/
 ```
 
 ## Usage
-#### TODO
+#### Convert GuitarPro to JAMS
+Update ```<base_dir>``` (defined at the bottom of the script) to point to the top-level directory containing [GuitarPro](https://www.guitar-pro.com/) files, then run the following:
 ```
-import guitar_transcription_inhibition
+python guitar_transcription_inhibition/gpro/process_guitarpro.py
 ```
+The corresponding [JAMS](https://jams.readthedocs.io/en/stable/) annotations will be placed under ```<base_dir>/jams```.
+
+#### Computing Inhibition Weights
+The process to compute inhibition weights for an arbitrary collection of symbolic tablature data involves extending the ```SymbolicTablature``` dataset wrapper and employing an ```InhibitionMatrixTrainer```.
+
+Please see ```acquire_dadagp_matrix.py``` and ```acquire_guitarset_matrices.py``` under ```guitar_transcription_inhibition/inhibition``` for examples on how to compute inhibition weights for [DadaGP](https://github.com/dada-bots/dadaGP) and [GuitarSet](https://guitarset.weebly.com/), respectively.
+
+#### Using Proposed Output Layer
+The proposed tablature output layer can be initialized as an instance of ```torch.nn.Module``` as follows:
+```
+from guitar_transcription_inhibition.models import LogisticTablatureEstimator
+
+tablature_layer = LogisticTablatureEstimator(dim_in=<dim_in>,
+                                             profile=<profile>,
+                                             matrix_path=<matrix_path>,
+                                             lmbda=<lmbda>)
+```
+
+Please see the documentation in ```guitar_transcription_inhibition/models/tablature_layers.py``` and [amt-tools](https://github.com/cwitkowitz/amt-tools) for more information regarding the input arguments and usages within the [amt-tools](https://github.com/cwitkowitz/amt-tools) framework. 
+
+#### Six-Fold Cross-Validation on GuitarSet
+The scripts ```experiment.py``` and ```evaluation.py``` under ```six_fold_cv_scripts``` are also available as a more complete example of how to train and evaluate a model under the six-fold cross-validation schema using [amt-tools](https://github.com/cwitkowitz/amt-tools).
 
 ## Generated Files
-The experiment root directory ```<root_dir>``` is one parameter defined at the top of the experiment script.
-Execution of ```training/six_fold_experiment.py``` or ```training/train_to_deploy.py``` will generate the following under ```<root_dir>```:
- - ```n/```
+Execution of ```six_fold_cv_scripts/experiment.py``` will generate the following under ```<root_dir>``` (defined at the top of the script):
+- ```n/``` - folder (beginning at ```n = 1```)<sup>1</sup> containing [sacred](https://sacred.readthedocs.io/en/stable/quickstart.html) experiment files:
+  - ```config.json``` - parameter values used for the experiment
+  - ```cout.txt``` - contains any text printed to console
+  - ```metrics.json``` - evaluation results for the experiment
+  - ```run.json``` - system and experiment information
+- ```models/``` - folder containing saved model and optimizer state at each checkpoint, as well as an events file (for each execution) readable by [tensorboard](https://www.tensorflow.org/tensorboard)
+- ```results/``` - folder containing separate evaluation results for each track within the test set
+- ```_sources/``` - folder containing copies of scripts at the time(s) execution
 
-    Folder (beginning at ```n = 1```) containing [sacred](https://sacred.readthedocs.io/en/stable/quickstart.html) experiment files:
- 
-     - ```config.json``` - parameter values for the experiment
-     - ```cout.txt``` - contains any text printed to console
-     - ```metrics.json``` - evaluation results for the experiment
-     - ```run.json``` system and experiment information
+Additionally, ground-truth and features will be saved under the path specified by ```gset_cache```, unless ```save_data=False```.
+Scripts related to [GuitarPro](https://www.guitar-pro.com/) -- [JAMS](https://jams.readthedocs.io/en/stable/) conversion, inhibition matrix acquisition, visualization, and evaluation will also generate the respective files.
 
-    An additional folder (```n += 1```) with experiment files is created for each run where the name of the [sacred](https://sacred.readthedocs.io/en/stable/quickstart.html) experiment (```<root_dir>```) is the same. 
+<sup>1</sup>An additional folder (```n += 1```) containing similar files is created for each execution with the same experiment name ```<EX_NAME>```.
 
- - ```models/```
-
-    Folder containing saved model and optimizer states at checkpoints, as well as the events files that tensorboard reads.
-
- - ```results/```
-
-    Folder containing individual evaluation results for each track within the test set.
-
- - ```_sources/```
-
-    Folder containing copies of the script(s) at the time(s) of execution.
-
-Additionally, ground-truth will be saved under the path specified by ```features_gt_cache```, unless ```save_data=False```.
 
 ## Analysis
 During training, losses and various validation metrics can be analyzed in real-time by running:
 ```
 tensorboard --logdir=<root_dir>/models --port=<port>
 ```
-Here we assume the current directory within the command-line interface contains ```<root_dir>```.
- ```<port>``` is an integer corresponding to an available port (```port = 6006``` if unspecified).
+Here we assume the current working directory contains ```<root_dir>```, and ```<port>``` is an integer corresponding to an available port (```port = 6006``` if unspecified).
 
-After running the command, navigate to <http://localhost:port> to view any reported training or validation observations within the tensorboard interface.
+After running the above command, navigate to [http://localhost:&lt;port&gt;]() with an internet browser to view any reported training or validation observations within the tensorboard interface.
 
 ## Cite
-##### SMC 2022 Paper
+##### SMC 2022 Paper ([Link](https://zenodo.org/record/6797681#.YtW0V7bMK8E))
 ```
 @inproceedings{cwitkowitz2022data,
   title     = {A Data-Driven Methodology for Considering Feasibility and Pairwise Likelihood in Deep Learning Based Guitar Tablature Transcription Systems},
