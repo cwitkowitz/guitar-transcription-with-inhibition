@@ -26,12 +26,12 @@ python guitar_transcription_inhibition/gpro/process_guitarpro.py
 The corresponding [JAMS](https://jams.readthedocs.io/en/stable/) annotations will be placed under ```<base_dir>/jams```.
 
 #### Computing Inhibition Weights
-The process to compute inhibition weights for an arbitrary collection of symbolic tablature data involves extending the ```SymbolicTablature``` dataset wrapper and employing an ```InhibitionMatrixTrainer```.
+The process for computing inhibition weights for an arbitrary collection of symbolic tablature data involves extending the ```SymbolicTablature``` dataset wrapper and employing an ```InhibitionMatrixTrainer```.
 
 Please see ```acquire_dadagp_matrix.py``` and ```acquire_guitarset_matrices.py``` under ```guitar_transcription_inhibition/inhibition``` for examples on how to compute inhibition weights for [DadaGP](https://github.com/dada-bots/dadaGP) and [GuitarSet](https://guitarset.weebly.com/), respectively.
 
 #### Using Proposed Output Layer
-The proposed tablature output layer can be initialized as an instance of ```torch.nn.Module``` as follows:
+The proposed tablature output layer can be initialized as follows:
 ```
 from guitar_transcription_inhibition.models import LogisticTablatureEstimator
 
@@ -41,10 +41,12 @@ tablature_layer = LogisticTablatureEstimator(dim_in=<dim_in>,
                                              lmbda=<lmbda>)
 ```
 
+Note that ```tablature_layer``` is an instance of ```torch.nn.Module```, and can be used as such.
+It also acts as a standalone instance of ```amt_tools.models.TranscriptionModel```, and therefore implements the relevant functions ```TranscriptionModel.pre_proc``` and ```TranscriptionModel.post_proc```.
 Please see the documentation in ```guitar_transcription_inhibition/models/tablature_layers.py``` and [amt-tools](https://github.com/cwitkowitz/amt-tools) for more information regarding the input arguments and usages within the [amt-tools](https://github.com/cwitkowitz/amt-tools) framework. 
 
 #### Six-Fold Cross-Validation on GuitarSet
-The scripts ```experiment.py``` and ```evaluation.py``` under ```six_fold_cv_scripts``` are also available as a more complete example of how to train and evaluate a model under the six-fold cross-validation schema using [amt-tools](https://github.com/cwitkowitz/amt-tools).
+The scripts ```experiment.py``` and ```evaluation.py``` under ```six_fold_cv_scripts``` are also available as a more complete example of how to train and evaluate the proposed model under the six-fold cross-validation schema using [amt-tools](https://github.com/cwitkowitz/amt-tools).
 
 ## Generated Files
 Execution of ```six_fold_cv_scripts/experiment.py``` will generate the following under ```<root_dir>``` (defined at the top of the script):
@@ -58,7 +60,7 @@ Execution of ```six_fold_cv_scripts/experiment.py``` will generate the following
 - ```_sources/``` - folder containing copies of scripts at the time(s) execution
 
 Additionally, ground-truth and features will be saved under the path specified by ```gset_cache```, unless ```save_data=False```.
-Scripts related to [GuitarPro](https://www.guitar-pro.com/) -- [JAMS](https://jams.readthedocs.io/en/stable/) conversion, inhibition matrix acquisition, visualization, and evaluation will also generate the respective files.
+Scripts related to [GuitarPro](https://www.guitar-pro.com/) -- [JAMS](https://jams.readthedocs.io/en/stable/) conversion, inhibition matrix acquisition, visualization, and evaluation will also generate their respective files.
 
 <sup>1</sup>An additional folder (```n += 1```) containing similar files is created for each execution with the same experiment name ```<EX_NAME>```.
 
