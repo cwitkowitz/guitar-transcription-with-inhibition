@@ -43,6 +43,7 @@ tablature_layer = LogisticTablatureEstimator(dim_in=<dim_in>,
 
 Note that ```tablature_layer``` is an instance of ```torch.nn.Module```, and can be used as such.
 It also acts as a standalone instance of ```amt_tools.models.TranscriptionModel```, and therefore implements the relevant functions ```TranscriptionModel.pre_proc``` and ```TranscriptionModel.post_proc```.
+
 Please see the documentation in ```guitar_transcription_inhibition/models/tablature_layers.py``` and [amt-tools](https://github.com/cwitkowitz/amt-tools) for more information regarding the input arguments and usages within the [amt-tools](https://github.com/cwitkowitz/amt-tools) framework. 
 
 #### Six-Fold Cross-Validation on GuitarSet
@@ -60,7 +61,7 @@ Execution of ```six_fold_cv_scripts/experiment.py``` will generate the following
 - ```_sources/``` - folder containing copies of scripts at the time(s) execution
 
 Additionally, ground-truth and features will be saved under the path specified by ```gset_cache```, unless ```save_data=False```.
-Scripts related to [GuitarPro](https://www.guitar-pro.com/) -- [JAMS](https://jams.readthedocs.io/en/stable/) conversion, inhibition matrix acquisition, visualization, and evaluation will also generate their respective files.
+Scripts related to [GuitarPro](https://www.guitar-pro.com/) -- [JAMS](https://jams.readthedocs.io/en/stable/) conversion, inhibition matrix acquisition, visualization, and evaluation will also generate the respective files.
 
 <sup>1</sup>An additional folder (```n += 1```) containing similar files is created for each execution with the same experiment name ```<EX_NAME>```.
 
