@@ -42,33 +42,6 @@ class SymbolicTablature(TranscriptionDataset):
         super().__init__(base_dir, splits, hop_length, sample_rate, None, profile, num_frames,
                          None, split_notes, reset_data, store_data, save_data, save_loc, seed)
 
-    # TODO - delete if unnecessary
-    """
-    def __getitem__(self, index):
-        "/""
-        Extension of parent method which additionally removes hop length from ground-truth when sampling.
-
-        Parameters
-        ----------
-        index : int
-          Index of sampled track
-
-        Returns
-        ----------
-        data : dict
-          Dictionary containing the features and ground-truth data for the sampled track
-        "/""
-
-        # Call the main __getitem__() function
-        data = super().__getitem__(index)
-
-        if tools.query_dict(data, tools.KEY_HOP):
-            # Remove hop length from ground-truth
-            data.pop(tools.KEY_HOP)
-
-        return data
-    """
-
     def get_track_data(self, track_id, frame_start=None, frame_length=None):
         """
         Get the ground truth for a track within an interval, skipping feature extraction.
@@ -107,24 +80,25 @@ class SymbolicTablature(TranscriptionDataset):
         # Determine the last frame at which an interval can begin
         sampling_end_point = data[tools.KEY_TABLATURE].shape[-1] - frame_length
 
-        # Keep track of the amount of sampling attempts
-        attempts_remaining = self.max_sample_attempts
+        if frame_start is None:
+            # Keep track of the amount of sampling attempts
+            attempts_remaining = min(1, self.max_sample_attempts)
 
-        # If a specific starting frame was not provided, sample one randomly
-        while frame_start is None or attempts_remaining:
-            # Sample a starting frame for the interval randomly
-            frame_start = self.rng.randint(0, sampling_end_point) if sampling_end_point > 0 else 0
+            # Try sampling non-silence until there are no attempts remaining
+            while attempts_remaining:
+                # Sample a starting frame for the interval randomly
+                frame_start = self.rng.randint(0, sampling_end_point) if sampling_end_point > 0 else 0
 
-            # Determine where the sample of frames should end
-            frame_end = frame_start + frame_length
+                # Check if non-silent frames were sampled
+                if np.sum(data[tools.KEY_TABLATURE][..., frame_start : frame_start + frame_length] != -1):
+                    # No more attempts are needed
+                    attempts_remaining = 0
+                else:
+                    # Decrement the number of attempts
+                    attempts_remaining -= 1
 
-            # Check if non-silent frames were sampled
-            if np.sum(data[tools.KEY_TABLATURE][..., frame_start : frame_end] != -1):
-                # No more attempts are needed
-                attempts_remaining = 0
-            else:
-                # Decrement the number of attempts
-                attempts_remaining -= 1
+        # Determine where the sample of frames should end
+        frame_end = frame_start + frame_length
 
         # Slice all ground-truth to the sampled interval
         data = tools.slice_track(data, frame_start, frame_end, skip=[tools.KEY_FS, tools.KEY_HOP])
@@ -188,8 +162,6 @@ class SymbolicTablature(TranscriptionDataset):
 
             # Add all relevant ground-truth to the dictionary
             data.update({tools.KEY_FS : self.sample_rate,
-                         # TODO - delete if unnecessary
-                         #tools.KEY_HOP : self.hop_length,
                          tools.KEY_TABLATURE : tablature,
                          tools.KEY_MULTIPITCH : multi_pitch})
 
